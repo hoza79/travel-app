@@ -1,37 +1,45 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, Image, FlatList } from "react-native";
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  FlatList,
+  RefreshControl,
+} from "react-native";
 import styles from "../styles/ProfilePassengerView_styles";
 import PhotoGrid from "../common/PhotoGrid";
 import FullScreenImageViewer from "../common/FullScreenImageViewer";
 import Trip from "../common/Trip";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useFocusEffect } from "@react-navigation/native";
 import BASE_URL from "../config/api";
 
 const ProfilePassengerView = () => {
   const [activeTab, setActiveTab] = useState("Photos");
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [trips, setTrips] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [isOwner, setIsOwner] = useState(false);
+  const [trips, setTrips] = useState([]);
+  const [photos, setPhotos] = useState([]);
 
   const [name, setName] = useState("User");
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [interests, setInterests] = useState("");
-
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [coverPhoto, setCoverPhoto] = useState(null);
-
-  const [loading, setLoading] = useState(true);
 
   const route = useRoute();
   const passedUserId = route.params?.userId;
 
-  useEffect(() => {
-    loadProfile();
-  }, [passedUserId]);
-
+  // -------------------------------------
+  // LOAD PROFILE (used by refresh + focus)
+  // -------------------------------------
   const loadProfile = async () => {
     try {
       setLoading(true);
@@ -42,6 +50,8 @@ const ProfilePassengerView = () => {
       const myId = parseInt(await AsyncStorage.getItem("userId"), 10);
       const owner = !passedUserId || passedUserId === myId;
       setIsOwner(owner);
+
+      const finalUserId = owner ? myId : passedUserId;
 
       const url = owner
         ? `${BASE_URL}/profile/me`
@@ -57,7 +67,6 @@ const ProfilePassengerView = () => {
       setBio(data.bio || "");
       setCity(data.city || "");
       setInterests(data.interests || "");
-
       setProfilePhoto(data.profile_photo || null);
       setCoverPhoto(data.cover_photo || null);
 
@@ -68,18 +77,40 @@ const ProfilePassengerView = () => {
 
       const tripsUrl = owner
         ? `${BASE_URL}/post/my-trips`
-        : `${BASE_URL}/post/user/${passedUserId}`;
+        : `${BASE_URL}/post/user/${finalUserId}`;
 
       const tripsRes = await fetch(tripsUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       setTrips(await tripsRes.json());
+
+      const photosRes = await fetch(`${BASE_URL}/post/photos/${finalUserId}`);
+      const photosData = await photosRes.json();
+      setPhotos(photosData);
     } catch (err) {
       console.log("❌ Profile load error:", err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  // --------------------
+  // FOCUS RE-FETCH FIX
+  // --------------------
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [passedUserId])
+  );
+
+  // --------------------
+  // PULL TO REFRESH FIX
+  // --------------------
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadProfile();
   };
 
   const openImage = (src) => {
@@ -108,6 +139,9 @@ const ProfilePassengerView = () => {
     <View style={styles.container}>
       <FlatList
         data={[]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         ListHeaderComponent={
           <View>
             <View style={styles.headerSection}>
@@ -191,7 +225,7 @@ const ProfilePassengerView = () => {
 
             {activeTab === "Photos" && (
               <View style={{ alignItems: "center", marginTop: 20 }}>
-                <PhotoGrid />
+                <PhotoGrid photos={photos} />
               </View>
             )}
 

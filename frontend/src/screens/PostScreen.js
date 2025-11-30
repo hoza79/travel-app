@@ -19,7 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import SuccessMessageBox from "../common/SuccessMessageBox";
 import { GOOGLE_API_KEY } from "@env";
 import BASE_URL from "../config/api";
-import * as ImagePicker from "expo-image-picker"; // ✅ ADDED
+import * as ImagePicker from "expo-image-picker";
 
 let fromTimeout;
 let toTimeout;
@@ -34,23 +34,22 @@ const PostScreen = () => {
   const [to, setTo] = useState("");
   const [fromSuggestions, setFromSuggestions] = useState([]);
   const [toSuggestions, setToSuggestions] = useState([]);
+
+  const [photoLocationSuggestions, setPhotoLocationSuggestions] = useState([]);
+
   const [date, setDate] = useState("");
   const [seatsAvailable, setSeatsAvailable] = useState("");
   const [description, setDescription] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
+
   const [location, setLocation] = useState("");
-  // -----------------------------------------------------
-  // NEW: Selected photo state
-  // -----------------------------------------------------
   const [photo, setPhoto] = useState(null);
 
-  // -----------------------------------------------------
-  // NEW: Image picker function
-  // -----------------------------------------------------
-
+  // CLOUDINARY
   const CLOUD_NAME = "del5ajmby";
   const UPLOAD_PRESET = "profile_preset";
 
@@ -91,7 +90,9 @@ const PostScreen = () => {
   const handlePhotoPost = async () => {
     const token = await AsyncStorage.getItem("token");
     if (!token) return;
+
     let uploadedPhotoUrl = null;
+
     if (photo) {
       uploadedPhotoUrl = await uploadToCloudinary(photo);
     }
@@ -110,12 +111,14 @@ const PostScreen = () => {
     });
   };
 
-  let timeouts = { from: null, to: null };
+  /** FETCH GOOGLE CITY SUGGESTIONS */
+  let timeouts = { from: null, to: null, photoLocation: null };
 
   const fetchSuggestions = async (query, type) => {
     if (!query || query.length < 2) {
       if (type === "from") setFromSuggestions([]);
-      else setToSuggestions([]);
+      else if (type === "to") setToSuggestions([]);
+      else if (type === "photoLocation") setPhotoLocationSuggestions([]);
       return;
     }
 
@@ -129,23 +132,20 @@ const PostScreen = () => {
         );
         const data = await res.json();
 
-        if (!data.predictions || data.predictions.length === 0) {
-          if (type === "from") setFromSuggestions([]);
-          else setToSuggestions([]);
-          return;
-        }
-
-        const simplified = data.predictions.map((item) => ({
-          id: item.place_id,
-          name: item.description,
-        }));
+        const simplified =
+          data?.predictions?.map((item) => ({
+            id: item.place_id,
+            name: item.description,
+          })) || [];
 
         if (type === "from") setFromSuggestions(simplified);
-        else setToSuggestions(simplified);
+        else if (type === "to") setToSuggestions(simplified);
+        else if (type === "photoLocation")
+          setPhotoLocationSuggestions(simplified);
       } catch (e) {
         console.error(`${type} fetch error:`, e);
       }
-    }, 100);
+    }, 120);
   };
 
   return (
@@ -155,6 +155,7 @@ const PostScreen = () => {
         <Image source={require("../assets/logo.png")} style={styles.logo} />
       </View>
 
+      {/* MAIN TABS */}
       <View style={styles.mainTabContainer}>
         <TouchableOpacity
           style={[
@@ -191,15 +192,17 @@ const PostScreen = () => {
         </TouchableOpacity>
       </View>
 
+      {/* INPUTS */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView
           style={styles.keyboardContainer}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
+          {/* TRIP MODE */}
           {selectedMain === "trip" && (
             <View style={styles.tripInfoWrapper}>
               <View style={styles.tripInfo}>
-                {/* trip UI EXACT as before… */}
+                {/* Trip type */}
                 <View style={styles.subTabInsideBox}>
                   <TouchableOpacity
                     style={[
@@ -236,8 +239,7 @@ const PostScreen = () => {
                   </TouchableOpacity>
                 </View>
 
-                {/* ALL your trip input fields kept untouched */}
-                {/* ... */}
+                {/* FROM */}
                 <View style={{ position: "relative", marginBottom: 10 }}>
                   <View style={styles.inputContainer}>
                     <Image
@@ -276,7 +278,7 @@ const PostScreen = () => {
                   )}
                 </View>
 
-                {/* second input */}
+                {/* TO */}
                 <View style={{ position: "relative", marginBottom: 10 }}>
                   <View style={styles.inputContainer}>
                     <Image
@@ -315,7 +317,7 @@ const PostScreen = () => {
                   )}
                 </View>
 
-                {/* date/seats */}
+                {/* DATE + SEATS */}
                 <View style={styles.dateAndSeatsContainer}>
                   <View style={styles.dateAndIcon}>
                     <TouchableOpacity onPress={() => setShowDatePicker(true)}>
@@ -376,11 +378,9 @@ const PostScreen = () => {
             </View>
           )}
 
+          {/* PHOTO MODE */}
           {selectedMain === "photo" && (
             <View style={styles.photoContainer}>
-              {/* -----------------------------------------------------
-                  ONLY CHANGE: Add onPress + image preview
-              ----------------------------------------------------- */}
               <TouchableOpacity style={styles.uploadBox} onPress={pickImage}>
                 {photo ? (
                   <Image
@@ -401,13 +401,37 @@ const PostScreen = () => {
                 )}
               </TouchableOpacity>
 
-              <TextInput
-                placeholder="Location"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                style={styles.textInputPhoto}
-                value={location}
-                onChangeText={setLocation}
-              />
+              {/* LOCATION + DROPDOWN */}
+              <View style={{ position: "relative", marginBottom: 10 }}>
+                <TextInput
+                  placeholder="Location"
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  style={styles.textInputPhoto}
+                  value={location}
+                  onChangeText={(text) => {
+                    setLocation(text);
+                    fetchSuggestions(text, "photoLocation");
+                  }}
+                />
+
+                {photoLocationSuggestions.length > 0 && (
+                  <FlatList
+                    data={photoLocationSuggestions}
+                    keyExtractor={(item) => item.id}
+                    style={styles.photoDropdown}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setLocation(item.name);
+                          setPhotoLocationSuggestions([]);
+                        }}
+                      >
+                        <Text style={styles.dropdownText}>{item.name}</Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                )}
+              </View>
 
               <TextInput
                 placeholder="Description"
@@ -439,6 +463,7 @@ const PostScreen = () => {
           try {
             const token = await AsyncStorage.getItem("token");
             if (!token) return;
+
             const response = await fetch(`${BASE_URL}/post`, {
               method: "POST",
               headers: {
@@ -454,10 +479,12 @@ const PostScreen = () => {
                 type: tripType,
               }),
             });
+
             const data = await response.json();
             const messageText = Array.isArray(data.message)
               ? data.message[0]
               : data.message;
+
             if (response.ok) {
               setMessageType("success");
               setMessage(messageText);
@@ -470,8 +497,8 @@ const PostScreen = () => {
               setVisible(true);
               setTimeout(() => setVisible(false), 2000);
             }
-          } catch (error) {
-            console.error("❌ Fetch error:", error);
+          } catch (e) {
+            console.error("POST error:", e);
           }
         }}
       >

@@ -97,7 +97,6 @@ export class PostService {
           )) AS distance
         FROM trips
         JOIN users ON trips.creator_id = users.id
-        WHERE origin_lat IS NOT NULL AND destination_lat IS NOT NULL
         ORDER BY distance ASC`,
         [userLat, userLng, userLat],
       );
@@ -181,22 +180,33 @@ export class PostService {
     }
   }
 
-  update(id: number, updatePostDto: UpdatePostDto) {
-    return `This action updates a #${id} post`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} post`;
-  }
+  // ---------------------------
+  // PHOTO SECTION
+  // ---------------------------
 
   async createPhoto(createPhotoDto: CreatePhotoDto, userId: number) {
     const { photo_url, location, description } = createPhotoDto;
+
     try {
+      if (!location || location.trim().length === 0) {
+        throw new BadRequestException('Location is required');
+      }
+
+      const coords = await getCoordinates(location);
+
+      if (!coords || !coords.lat || !coords.lng) {
+        throw new BadRequestException('Invalid location');
+      }
+
+      const { lat, lng } = coords;
+
       await this.db.query(
-        `INSERT INTO photos (user_id, photo_url, location, description)
-        VALUES (?, ?, ?, ?)`,
-        [userId, photo_url, location, description],
+        `INSERT INTO photos 
+        (user_id, photo_url, location, description, photo_lat, photo_lng)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [userId, photo_url, location, description, lat, lng],
       );
+
       return { message: 'Photo post created successfully' };
     } catch (error) {
       console.error('❌ Database Error (createPhoto):', error);
@@ -204,25 +214,68 @@ export class PostService {
     }
   }
 
-  async getAllPhotos() {
+  async getAllPhotos(userLat?: number, userLng?: number) {
     try {
+      // 1. Missing location → fallback to created_at
+      if (!userLat || !userLng) {
+        const [rows]: any = await this.db.query(
+          `SELECT 
+            photos.id,
+            photos.photo_url,
+            photos.location,
+            photos.description,
+            photos.created_at,
+            users.first_name,
+            users.profile_photo
+          FROM photos
+          JOIN users ON photos.user_id = users.id
+          ORDER BY photos.created_at DESC`,
+        );
+        return rows;
+      }
+
+      // 2. Distance sorting
       const [rows]: any = await this.db.query(
         `SELECT 
-         photos.id,
-         photos.photo_url,
-         photos.location,
-         photos.description,
-         photos.created_at,
-         users.first_name,
-         users.profile_photo
-       FROM photos
-       JOIN users ON photos.user_id = users.id
-       ORDER BY photos.created_at DESC`,
+            photos.id,
+            photos.photo_url,
+            photos.location,
+            photos.description,
+            photos.created_at,
+            photos.photo_lat,
+            photos.photo_lng,
+            users.first_name,
+            users.profile_photo,
+            (6371 * acos(
+              cos(radians(?)) *
+              cos(radians(photo_lat)) *
+              cos(radians(photo_lng) - radians(?)) +
+              sin(radians(?)) *
+              sin(radians(photo_lat))
+            )) AS distance
+         FROM photos
+         JOIN users ON photos.user_id = users.id
+         WHERE photo_lat IS NOT NULL AND photo_lng IS NOT NULL
+         ORDER BY distance ASC`,
+        [userLat, userLng, userLat],
       );
 
       return rows;
     } catch (error) {
       console.error('❌ Database Error (getAllPhotos):', error);
+      throw error;
+    }
+  }
+
+  async getPhotosByUser(userId: number) {
+    try {
+      const [data] = await this.db.query(
+        `SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC`,
+        [userId],
+      );
+      return data;
+    } catch (error) {
+      console.error('❌ Database Error (getPhotosByUser):', error);
       throw error;
     }
   }

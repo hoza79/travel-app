@@ -1,3 +1,4 @@
+// src/screens/HomeScreen.js
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -8,90 +9,115 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import TravelCard from "../common/TravelCard";
+import PhotoCard from "../common/PhotoCard";
 import styles from "../styles/HomeScreen_styles";
 import * as Location from "expo-location";
 import BASE_URL from "../config/api";
 import { getSocket, onSocketReady } from "../socket";
 
 const HomeScreen = () => {
-  const [trips, setTrips] = useState([]);
-  const [photos, setPhotos] = useState([]);
-  const [filteredTrips, setFilteredTrips] = useState([]);
+  const [items, setItems] = useState([]);
+  const [filteredItems, setFilteredItems] = useState([]);
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [userLat, setUserLat] = useState(null);
   const [userLng, setUserLng] = useState(null);
 
-  const fetchTrips = async (lat, lng) => {
-    if (!lat || !lng) return;
+  const fetchAll = async (lat, lng) => {
     try {
-      const response = await fetch(
-        `${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`
-      );
-      const data = await response.json();
-      setTrips(data);
-      setFilteredTrips(data);
+      console.log("🔥 Fetching trips + photos...");
+
+      const [tripsRes, photosRes] = await Promise.all([
+        fetch(`${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`),
+        fetch(`${BASE_URL}/post/photos?lat=${lat}&lng=${lng}`),
+      ]);
+
+      const trips = await tripsRes.json();
+      const rawPhotos = await photosRes.json();
+
+      console.log("🚗 Trips returned:", trips);
+      console.log("📸 Photos returned:", rawPhotos);
+
+      const photos = Array.isArray(rawPhotos) ? rawPhotos : [];
+
+      // --- FIX: Avoid overwriting item.type ---
+      const merged = [
+        ...trips.map((t) => ({ ...t, feedType: "trip" })),
+        ...photos.map((p) => ({ ...p, feedType: "photo" })),
+      ];
+
+      merged.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+
+      console.log("🔥 FINAL merged list:", merged);
+
+      setItems(merged);
     } catch (error) {
       console.error("❌ Fetch error:", error);
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
   };
 
+  // Load once
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
-      const current_location = await Location.getCurrentPositionAsync({});
-      const lat = current_location.coords.latitude;
-      const lng = current_location.coords.longitude;
+      const loc = await Location.getCurrentPositionAsync({});
+      const lat = loc.coords.latitude;
+      const lng = loc.coords.longitude;
 
       setUserLat(lat);
       setUserLng(lng);
 
-      await fetchTrips(lat, lng);
+      await fetchAll(lat, lng);
     })();
   }, []);
 
-  // 🔥 LISTEN TO SOCKET AND REFRESH LIST WHEN REQUEST IS ACCEPTED
+  // Refresh on notifications
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
       const handler = () => {
-        if (userLat && userLng) fetchTrips(userLat, userLng);
+        if (userLat && userLng) fetchAll(userLat, userLng);
       };
 
       socket.on("new_notification", handler);
-
       return () => socket.off("new_notification", handler);
     });
   }, [userLat, userLng]);
 
+  // Search filter
   useEffect(() => {
     if (!search.trim()) {
-      setFilteredTrips(trips);
+      setFilteredItems(items);
       return;
     }
 
     const lower = search.toLowerCase();
-    const results = trips.filter((t) =>
-      `${t.origin} ${t.destination}`.toLowerCase().includes(lower)
-    );
-    setFilteredTrips(results);
-  }, [search, trips]);
+
+    const results = items.filter((it) => {
+      const a = it.origin ?? "";
+      const b = it.destination ?? "";
+      return `${a} ${b}`.toLowerCase().includes(lower);
+    });
+
+    setFilteredItems(results);
+  }, [search, items]);
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
         <FlashList
-          data={filteredTrips}
+          data={filteredItems}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => fetchTrips(userLat, userLng)}
+              onRefresh={() => fetchAll(userLat, userLng)}
             />
           }
           ListHeaderComponent={
@@ -99,27 +125,48 @@ const HomeScreen = () => {
               <TextInput
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search trips..."
+                placeholder="Search trips or photos..."
                 placeholderTextColor="#9bb0d4"
                 style={styles.searchBar}
               />
             </View>
           }
-          renderItem={({ item }) => (
-            <TravelCard
-              from={item.origin}
-              to={item.destination}
-              date={item.trip_date}
-              seatsAvailable={item.available_seats}
-              description={item.description}
-              tripType={item.type}
-              firstName={item.first_name}
-              distance={item.distance}
-              creatorId={item.creator_id}
-              tripId={item.id}
-              profilePhoto={item.profile_photo}
-            />
-          )}
+          renderItem={({ item }) => {
+            // 🔥 PHOTO POST
+            if (item.feedType === "photo") {
+              return (
+                <PhotoCard
+                  userName={item.first_name}
+                  caption={item.description}
+                  photos={[item.photo_url]}
+                  profilePhoto={item.profile_photo}
+                />
+              );
+            }
+
+            // 🔥 TRIP POST
+            if (item.feedType === "trip") {
+              const tripLabel = item.trip_type || item.type || "trip"; // backend label
+
+              return (
+                <TravelCard
+                  from={item.origin}
+                  to={item.destination}
+                  date={item.trip_date}
+                  seatsAvailable={item.available_seats}
+                  description={item.description}
+                  tripType={tripLabel} // <--- this FIXES “trip” showing everywhere
+                  firstName={item.first_name}
+                  distance={item.distance}
+                  creatorId={item.creator_id}
+                  tripId={item.id}
+                  profilePhoto={item.profile_photo}
+                />
+              );
+            }
+
+            return null;
+          }}
           estimatedItemSize={400}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}

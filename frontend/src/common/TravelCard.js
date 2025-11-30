@@ -6,6 +6,17 @@ import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
 import { getSocket, onSocketReady } from "../socket";
+import { countryFlags } from "../common/Flags";
+// --------------------------------------------------
+// ⭐ ADDED BACK: FLAG EXTRACTOR
+// --------------------------------------------------
+const getFlagForLocation = (location) => {
+  if (!location || typeof location !== "string") return ""; // <-- FIX
+
+  const parts = location.split(",");
+  const country = parts[parts.length - 1].trim();
+  return countryFlags[country] || "";
+};
 
 const TravelCard = ({
   firstName,
@@ -24,6 +35,11 @@ const TravelCard = ({
   notifType,
   interestRequestId,
 }) => {
+  if (!tripId || isNaN(Number(tripId))) {
+    console.log("❌ INVALID tripId passed to TravelCard:", tripId);
+    return null;
+  }
+
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState(initialStatus ?? null);
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -166,8 +182,14 @@ const TravelCard = ({
     }
   };
 
-  const originCity = from ? from.split(/[ ,]+/)[0] : "";
-  const destinationCity = to ? to.split(/[ ,]+/)[0] : "";
+  // --------------------------------------------------
+  // ⭐ FIXED: Extract city + flag
+  // --------------------------------------------------
+  const originCity = from ? from.split(",")[0].trim() : "";
+  const destinationCity = to ? to.split(",")[0].trim() : "";
+
+  const originFlag = getFlagForLocation(from);
+  const destinationFlag = getFlagForLocation(to);
 
   let formattedDate = "";
   if (date) {
@@ -259,7 +281,8 @@ const TravelCard = ({
             adjustsFontSizeToFit
             minimumFontScale={0.6}
           >
-            {originCity} → {destinationCity}
+            {/* ⭐ FLAG FIX APPLIED HERE */}
+            {originCity} {originFlag} → {destinationCity} {destinationFlag}
           </Text>
           <Text style={styles.date}>{formattedDate}</Text>
         </View>
@@ -281,7 +304,7 @@ const TravelCard = ({
             {seatsAvailable} Seats available
           </Text>
 
-          {/* 🔥 OWNER: Accept / Decline buttons */}
+          {/* OWNER: Accept / Decline */}
           {embeddedMode &&
             notifType === "interest_request" &&
             isOwner &&
@@ -342,7 +365,6 @@ const TravelCard = ({
               </View>
             )}
 
-          {/* 🔥 NORMAL FEED (non-owner) */}
           {!embeddedMode && !isOwner && (
             <TouchableOpacity
               style={[
@@ -362,7 +384,6 @@ const TravelCard = ({
             </TouchableOpacity>
           )}
 
-          {/* 🔥 SHOW SEND MESSAGE WHEN CHAT IS POSSIBLE */}
           {embeddedMode &&
             (notifType === "interest_accepted" ||
               (notifType === "interest_request" &&

@@ -1,55 +1,61 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, Image, TouchableOpacity, ScrollView } from "react-native";
 import styles from "../styles/PhotoCard_styles";
+import FullScreenImageViewer from "./FullScreenImageViewer";
 
-const PhotoCard = ({ userName, caption, photos = [] }) => {
+const PhotoCard = ({ userName, caption, photos = [], profilePhoto }) => {
+  const [fullscreenImage, setFullscreenImage] = useState(null);
+
   return (
-    <TouchableOpacity activeOpacity={0.9}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.profilePicture}>
-            <Image
-              source={require("../assets/profile-picture.jpeg")}
-              resizeMode="cover"
-              style={styles.profileImage}
-            />
-          </View>
+    <View style={styles.container}>
+      {fullscreenImage && (
+        <FullScreenImageViewer
+          source={{ uri: fullscreenImage }}
+          onClose={() => setFullscreenImage(null)}
+        />
+      )}
 
-          <View>
-            <Text style={styles.userName}>{userName}</Text>
-            <Text style={styles.subText}>Shared a photo</Text>
-          </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.profilePicture}>
+          <Image
+            source={
+              profilePhoto
+                ? { uri: profilePhoto }
+                : require("../assets/profile-picture.jpeg")
+            }
+            resizeMode="cover"
+            style={styles.profileImage}
+          />
         </View>
 
-        {/* Photos */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.photoScroll}
-          contentContainerStyle={{ paddingRight: 10 }}
-          directionalLockEnabled={true}
-          nestedScrollEnabled={true}
-          scrollEventThrottle={16}
-        >
-          {photos.map((photo, index) => (
-            <Image
-              key={index}
-              source={{ uri: photo }}
-              style={styles.photo}
-              resizeMode="cover"
-            />
-          ))}
-        </ScrollView>
-
-        {caption && <Text style={styles.caption}>{caption}</Text>}
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>12 Oct 2025</Text>
+        <View>
+          <Text style={styles.userName}>{userName}</Text>
+          <Text style={styles.subText}>Shared a photo</Text>
         </View>
       </View>
-    </TouchableOpacity>
+
+      {/* FULL-WIDTH PHOTO */}
+      {photos.map((photo, index) => (
+        <TouchableOpacity
+          key={index}
+          activeOpacity={0.8}
+          onPress={() => setFullscreenImage(photo)}
+        >
+          <Image
+            source={{ uri: photo }}
+            style={styles.photo}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      ))}
+
+      {caption && <Text style={styles.caption}>{caption}</Text>}
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Shared recently</Text>
+      </View>
+    </View>
   );
 };
-
 export default PhotoCard;

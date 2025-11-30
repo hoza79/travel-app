@@ -7,7 +7,7 @@ export class CreatePhotoDto {
 
   @IsOptional()
   @IsString()
-  location?: string;
+  location: string;
 
   @IsOptional()
   @IsString()

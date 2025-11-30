@@ -86,6 +86,7 @@ export default StyleSheet.create({
     marginBottom: 15,
     marginTop: 5,
   },
+
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -105,6 +106,7 @@ export default StyleSheet.create({
     borderColor: "rgba(255,255,255,0.15)",
     color: "white",
   },
+
   dropdown: {
     position: "absolute",
     backgroundColor: "#061237",
@@ -122,6 +124,26 @@ export default StyleSheet.create({
     shadowRadius: 4,
     elevation: 6,
   },
+
+  /** NEW — PERFECTLY ALIGNED PHOTO LOCATION DROPDOWN */
+  photoDropdown: {
+    position: "absolute",
+    backgroundColor: "#061237",
+    borderRadius: 10,
+    top: 45,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    maxHeight: 160,
+    width: "100%",
+    alignSelf: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+
   dropdownText: {
     color: "white",
     fontSize: 14,
@@ -130,6 +152,7 @@ export default StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.1)",
     borderBottomWidth: 1,
   },
+
   dateAndSeatsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -149,6 +172,7 @@ export default StyleSheet.create({
     borderColor: "rgba(255,255,255,0.15)",
     color: "white",
   },
+
   descriptionTextInput: {
     width: "100%",
     height: 95,
@@ -168,8 +192,6 @@ export default StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   uploadBox: {
     width: "100%",
@@ -203,7 +225,10 @@ export default StyleSheet.create({
     borderBottomWidth: 0.2,
     borderColor: "rgba(255,255,255,0.15)",
     marginBottom: 15,
+    textAlign: "left", // ✅ Forces the text to start on the left
+    paddingLeft: 0, // ✅ Make sure no unwanted left padding exists
   },
+
   descriptionPhotoInput: {
     width: "100%",
     height: 95,

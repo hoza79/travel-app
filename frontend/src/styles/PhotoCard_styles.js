@@ -55,12 +55,12 @@ export default StyleSheet.create({
   },
 
   photo: {
-    width: 250,
-    height: 180,
+    width: "100%",
+    height: 250,
     borderRadius: 18,
-    marginRight: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
+    marginTop: 5,
   },
 
   caption: {
