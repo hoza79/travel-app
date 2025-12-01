@@ -6,26 +6,19 @@ import BASE_URL from "../config/api";
 let socket = null;
 let readyCallbacks = [];
 
-/**
- * Create or return existing socket.
- * idempotent: if already connected it returns that socket.
- */
+// FIX: delayed identify, safe reconnect
 export const connectSocket = async () => {
   try {
     const token = await AsyncStorage.getItem("token");
     const userId = Number(await AsyncStorage.getItem("userId"));
 
-    // If socket exists and is connected, just return it
-    if (socket && socket.connected) {
-      return socket;
-    }
+    if (socket && socket.connected) return socket;
 
-    // If socket exists but not connected, attempt to disconnect cleanly first
     if (socket) {
       try {
         socket.removeAllListeners();
         socket.disconnect();
-      } catch (e) {}
+      } catch {}
       socket = null;
     }
 
@@ -40,19 +33,14 @@ export const connectSocket = async () => {
     });
 
     socket.on("connect", async () => {
-      console.log("APP SOCKET = CONNECTED");
-      // emit identify if we have userId
-      if (userId && socket && socket.connected) {
-        socket.emit("identify", { userId });
+      const finalUserId = Number(await AsyncStorage.getItem("userId"));
+
+      if (finalUserId && socket.connected) {
+        socket.emit("identify", { userId: finalUserId });
       }
 
-      // flush ready callbacks
       try {
-        readyCallbacks.forEach((cb) => {
-          try {
-            cb();
-          } catch (e) {}
-        });
+        readyCallbacks.forEach((cb) => cb());
       } finally {
         readyCallbacks = [];
       }
@@ -62,7 +50,6 @@ export const connectSocket = async () => {
       console.log("APP SOCKET = DISCONNECTED", reason);
     });
 
-    // helpful debug
     socket.on("identify_ack", (data) => {
       console.log("[SOCKET] identify_ack =", data);
     });
@@ -76,11 +63,6 @@ export const connectSocket = async () => {
 
 export const getSocket = () => socket;
 
-/**
- * Calls callback when socket exists and is connected.
- * If socket already ready -> immediate call.
- * Multiple callers are queued until ready.
- */
 export const onSocketReady = (callback) => {
   if (socket && socket.connected) {
     callback();
@@ -89,10 +71,8 @@ export const onSocketReady = (callback) => {
 
   readyCallbacks.push(callback);
 
-  // safety: if socket null, try to create it (best-effort)
   if (!socket) {
-    // fire-and-forget; errors are logged in connectSocket
-    connectSocket().catch((e) => {});
+    connectSocket().catch(() => {});
   }
 };
 
@@ -106,6 +86,6 @@ export const disconnectSocket = () => {
   try {
     socket.removeAllListeners();
     socket.disconnect();
-  } catch (e) {}
+  } catch {}
   socket = null;
 };

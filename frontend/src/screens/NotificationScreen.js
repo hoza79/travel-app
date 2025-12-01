@@ -24,6 +24,7 @@ export default function NotificationsScreen() {
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [popupLoading, setPopupLoading] = useState(false);
 
+  // 🌟 FIX: No unreadCount changes here!
   const load = async () => {
     const token = await AsyncStorage.getItem("token");
     try {
@@ -37,7 +38,6 @@ export default function NotificationsScreen() {
     }
   };
 
-  // 🔥 FIXED: We now pass the full notification, not only tripId
   const openTripPopup = async (notification) => {
     if (!notification) return;
 
@@ -52,7 +52,6 @@ export default function NotificationsScreen() {
       });
       const tripData = await res.json();
 
-      // 🔥 Inject missing required fields
       setSelectedTrip({
         ...tripData,
         tripId: tripData.id,
@@ -73,13 +72,19 @@ export default function NotificationsScreen() {
     load();
   }, []);
 
+  // 🌟 FIX: No unread increments from here anymore
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
-      socket.on("new_notification", () => load());
-      socket.on("notification_deleted", () => load());
+      socket.on("new_notification", () => {
+        load(); // refresh list only
+      });
+
+      socket.on("notification_deleted", () => {
+        load();
+      });
     });
 
     return () => {
@@ -87,6 +92,11 @@ export default function NotificationsScreen() {
       socket?.off("new_notification");
       socket?.off("notification_deleted");
     };
+  }, []);
+
+  // 🌟 When user opens this screen, reset unread to 0
+  useEffect(() => {
+    setUnreadCount(0);
   }, []);
 
   if (!notifications || notifications.length === 0) {
@@ -109,7 +119,7 @@ export default function NotificationsScreen() {
           <TouchableOpacity
             key={n.id || i}
             style={styles.bubble}
-            onPress={() => openTripPopup(n)} // 🔥 PASS FULL NOTIFICATION
+            onPress={() => openTripPopup(n)}
           >
             <View style={styles.headerRow}>
               <Image
@@ -123,7 +133,6 @@ export default function NotificationsScreen() {
 
             <Text style={styles.message}>{n.message}</Text>
 
-            {/* 🔥 Accept / Decline buttons */}
             {n.type === "interest_request" && (
               <View style={styles.buttonsRowCircle}>
                 {/* ACCEPT */}
@@ -141,6 +150,7 @@ export default function NotificationsScreen() {
                           },
                         }
                       );
+
                       load();
                       setUnreadCount((prev) => Math.max(prev - 1, 0));
                     } catch {}
@@ -168,7 +178,6 @@ export default function NotificationsScreen() {
         ))}
       </ScrollView>
 
-      {/* POPUP */}
       {(selectedTrip || popupLoading) && (
         <TouchableWithoutFeedback onPress={closePopup}>
           <View style={styles.overlay}>
@@ -181,7 +190,6 @@ export default function NotificationsScreen() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 20 }}
                   >
-                    {/* 🔥 TravelCard now ALWAYS has correct props */}
                     <TravelCard
                       {...selectedTrip}
                       embeddedMode={true}
@@ -204,15 +212,18 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#061237" },
   scrollContent: { paddingTop: 40, paddingHorizontal: 18, paddingBottom: 120 },
+
   bubble: {
     backgroundColor: "#020d2d",
     padding: 18,
     borderRadius: 20,
     marginBottom: 20,
   },
+
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   avatar: { width: 50, height: 50, borderRadius: 28, marginRight: 12 },
   name: { color: "white", fontSize: 18, fontWeight: "600" },
+
   message: { color: "#d7d9e8", fontSize: 16, marginBottom: 16, lineHeight: 22 },
 
   buttonsRowCircle: {

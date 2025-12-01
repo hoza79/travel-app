@@ -3,6 +3,7 @@ import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, onSocketReady, connectSocket } from "../socket";
 import BASE_URL from "../config/api";
+import { AppState } from "react-native";
 
 export const NotificationContext = createContext({
   unreadCount: 0,
@@ -23,7 +24,7 @@ export const NotificationProvider = ({ children }) => {
     };
   }, []);
 
-  // 🔵 Fetch unread notifications from server
+  // Fetch unread notifications
   const fetchInitialUnread = async () => {
     if (!__initial_load_promise) {
       __initial_load_promise = (async () => {
@@ -37,7 +38,6 @@ export const NotificationProvider = ({ children }) => {
           const data = await res.json();
           return Array.isArray(data) ? data.length : 0;
         } catch (e) {
-          console.log("[NotificationProvider] initial fetch err", e);
           return 0;
         }
       })();
@@ -46,59 +46,63 @@ export const NotificationProvider = ({ children }) => {
     try {
       const value = await __initial_load_promise;
       if (mountedRef.current) setUnreadCount(value);
-    } catch (e) {
-      console.log("[NotificationProvider] initial fetch failed", e);
-    }
+    } catch {}
   };
 
-  useEffect(() => {
-    connectSocket().catch(() => {});
+  // FIX #1 — wait for userId BEFORE connecting socket
+  const initSocketSafely = async () => {
+    const userId = await AsyncStorage.getItem("userId");
+    if (!userId) return;
 
+    await connectSocket();
     fetchInitialUnread();
+  };
 
-    // 🔵 Attach socket listeners once
+  // Connect once on mount (delayed until userId exists)
+  useEffect(() => {
+    initSocketSafely();
+  }, []);
+
+  // FIX #2 — re-identify on app resume
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", async (state) => {
+      if (state === "active") {
+        const socket = getSocket();
+        const userId = await AsyncStorage.getItem("userId");
+
+        if (socket && socket.connected && userId) {
+          socket.emit("identify", { userId });
+        }
+      }
+    });
+
+    return () => sub.remove();
+  }, []);
+
+  // SOCKET EVENT LISTENERS
+  useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
-      // 🚀 NEW: ALWAYS re-sync unread badge when socket connects
-      socket.on("connect", () => {
-        console.log(
-          "[NotificationProvider] socket reconnected → refreshing unread"
-        );
-        fetchInitialUnread(); // <--- THE NEW FIX
+      socket.on("connect", async () => {
+        const userId = await AsyncStorage.getItem("userId");
+        if (userId) socket.emit("identify", { userId });
+        fetchInitialUnread();
       });
 
       if (__global_listeners_attached) return;
 
-      const newNotificationHandler = (notif) => {
-        try {
-          setUnreadCount((prev) => {
-            const next = prev + 1;
-            console.log("[NotificationProvider] unread ->", prev, "=>", next);
-            return next;
-          });
-        } catch (e) {
-          console.log("[NotificationProvider] newNotification handler err", e);
-        }
+      const newNotificationHandler = () => {
+        setUnreadCount((prev) => prev + 1);
       };
 
-      const deletionHandler = (payload) => {
-        try {
-          setUnreadCount((prev) => Math.max(prev - 1, 0));
-          console.log("[NotificationProvider] notification_deleted", payload);
-        } catch (e) {
-          console.log("[NotificationProvider] deletion handler err", e);
-        }
+      const deletionHandler = () => {
+        setUnreadCount((prev) => Math.max(prev - 1, 0));
       };
 
       const clearedHandler = () => {
-        try {
-          setUnreadCount(0);
-          console.log("[NotificationProvider] notifications_cleared");
-        } catch (e) {
-          console.log("[NotificationProvider] cleared handler err", e);
-        }
+        setUnreadCount(0);
       };
 
       socket.on("new_notification", newNotificationHandler);
@@ -114,7 +118,6 @@ export const NotificationProvider = ({ children }) => {
       } catch {}
 
       __global_listeners_attached = true;
-      console.log("[NotificationProvider] listeners attached");
     });
   }, []);
 

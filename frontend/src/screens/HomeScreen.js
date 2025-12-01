@@ -125,7 +125,7 @@ const HomeScreen = () => {
               <TextInput
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search trips or photos..."
+                placeholder="Search trips..."
                 placeholderTextColor="#9bb0d4"
                 style={styles.searchBar}
               />
