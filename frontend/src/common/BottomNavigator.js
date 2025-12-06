@@ -1,12 +1,16 @@
+// src/navigation/BottomNavigator.js
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React, { useContext } from "react";
 import { Image, View, Text } from "react-native";
+
 import HomeScreen from "../screens/HomeScreen";
 import MessagesScreen from "../screens/MessagesScreen";
 import PostScreen from "../screens/PostScreen";
 import ProfilePassengerView from "../screens/ProfilePassengerView";
 import NotificationsScreen from "../screens/NotificationScreen";
+
 import { NotificationContext } from "../context/NotificationContext";
+import { MessageContext } from "../context/MessageContext";
 
 const Tab = createBottomTabNavigator();
 
@@ -54,9 +58,51 @@ const NotificationTabIcon = ({ focused }) => {
   );
 };
 
-const BottomNavigator = () => {
-  const { setUnreadCount } = useContext(NotificationContext);
+const MessageTabIcon = ({ focused }) => {
+  const { unreadMessages } = useContext(MessageContext);
 
+  return (
+    <View>
+      <Image
+        source={require("../assets/messages.png")}
+        style={{
+          width: 35,
+          height: 35,
+          tintColor: focused ? "white" : "#7282ab",
+        }}
+      />
+
+      {unreadMessages > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -6,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 10,
+            backgroundColor: "white",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 3,
+          }}
+        >
+          <Text
+            style={{
+              color: "#061237",
+              fontSize: 12,
+              fontWeight: "700",
+            }}
+          >
+            {unreadMessages > 99 ? "99+" : String(unreadMessages)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const BottomNavigator = () => {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -81,7 +127,6 @@ const BottomNavigator = () => {
         name="Home"
         component={HomeScreen}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Image
               source={require("../assets/home.png")}
@@ -99,17 +144,7 @@ const BottomNavigator = () => {
         name="Messages"
         component={MessagesScreen}
         options={{
-          headerShown: false,
-          tabBarIcon: ({ focused }) => (
-            <Image
-              source={require("../assets/messages.png")}
-              style={{
-                width: 35,
-                height: 35,
-                tintColor: focused ? "white" : "#7282ab",
-              }}
-            />
-          ),
+          tabBarIcon: ({ focused }) => <MessageTabIcon focused={focused} />,
         }}
       />
 
@@ -117,7 +152,6 @@ const BottomNavigator = () => {
         name="Post"
         component={PostScreen}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Image
               source={require("../assets/post.png")}
@@ -134,13 +168,7 @@ const BottomNavigator = () => {
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
-        listeners={{
-          tabPress: () => {
-            setUnreadCount(0);
-          },
-        }}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <NotificationTabIcon focused={focused} />
           ),
@@ -151,7 +179,6 @@ const BottomNavigator = () => {
         name="Profile"
         component={ProfilePassengerView}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Image
               source={require("../assets/profile.png")}

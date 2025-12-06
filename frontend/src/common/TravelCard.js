@@ -7,12 +7,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
 import { getSocket, onSocketReady } from "../socket";
 import { countryFlags } from "../common/Flags";
-// --------------------------------------------------
-// ⭐ ADDED BACK: FLAG EXTRACTOR
-// --------------------------------------------------
-const getFlagForLocation = (location) => {
-  if (!location || typeof location !== "string") return ""; // <-- FIX
 
+const getFlagForLocation = (location) => {
+  if (!location || typeof location !== "string") return "";
   const parts = location.split(",");
   const country = parts[parts.length - 1].trim();
   return countryFlags[country] || "";
@@ -182,9 +179,6 @@ const TravelCard = ({
     }
   };
 
-  // --------------------------------------------------
-  // ⭐ FIXED: Extract city + flag
-  // --------------------------------------------------
   const originCity = from ? from.split(",")[0].trim() : "";
   const destinationCity = to ? to.split(",")[0].trim() : "";
 
@@ -281,7 +275,6 @@ const TravelCard = ({
             adjustsFontSizeToFit
             minimumFontScale={0.6}
           >
-            {/* ⭐ FLAG FIX APPLIED HERE */}
             {originCity} {originFlag} → {destinationCity} {destinationFlag}
           </Text>
           <Text style={styles.date}>{formattedDate}</Text>
@@ -365,15 +358,37 @@ const TravelCard = ({
               </View>
             )}
 
+          {/* BOTTOM SEND MESSAGE / INTEREST BUTTON */}
           {!embeddedMode && !isOwner && (
             <TouchableOpacity
               style={[
                 styles.button,
                 buttonDisabled ? { opacity: 0.6 } : undefined,
               ]}
-              onPress={() => {
+              onPress={async () => {
                 if (status === "accepted") {
-                  navigation.navigate("ChatTest", { userId: creatorId });
+                  const token = await AsyncStorage.getItem("token");
+
+                  const res = await fetch(`${BASE_URL}/conversations/start`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      otherUserId: creatorId,
+                    }),
+                  });
+
+                  const data = await res.json();
+                  const conversationId = data.conversationId;
+
+                  navigation.navigate("Chat", {
+                    conversationId,
+                    receiverId: creatorId,
+                    receiverName: firstName,
+                    receiverPhoto: profilePhoto,
+                  });
                 } else {
                   handleInterest();
                 }
@@ -384,6 +399,7 @@ const TravelCard = ({
             </TouchableOpacity>
           )}
 
+          {/* NOTIFICATION MODE: ACCEPTED → SHOW SEND MESSAGE BUTTON */}
           {embeddedMode &&
             (notifType === "interest_accepted" ||
               (notifType === "interest_request" &&
@@ -394,9 +410,30 @@ const TravelCard = ({
                   styles.button,
                   { backgroundColor: "white", opacity: 1 },
                 ]}
-                onPress={() =>
-                  navigation.navigate("ChatTest", { userId: creatorId })
-                }
+                onPress={async () => {
+                  const token = await AsyncStorage.getItem("token");
+
+                  const res = await fetch(`${BASE_URL}/conversations/start`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      otherUserId: creatorId,
+                    }),
+                  });
+
+                  const data = await res.json();
+                  const conversationId = data.conversationId;
+
+                  navigation.navigate("Chat", {
+                    conversationId,
+                    receiverId: creatorId,
+                    receiverName: firstName,
+                    receiverPhoto: profilePhoto,
+                  });
+                }}
               >
                 <Text style={styles.buttonText}>Send Message</Text>
               </TouchableOpacity>

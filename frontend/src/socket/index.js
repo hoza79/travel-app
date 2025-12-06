@@ -6,11 +6,28 @@ import BASE_URL from "../config/api";
 let socket = null;
 let readyCallbacks = [];
 
-// FIX: delayed identify, safe reconnect
+/**
+ * Track which chat the user is currently viewing.
+ * null = user is NOT inside a ChatScreen
+ */
+export let activeChatId = null;
+export const setActiveChat = (id) => {
+  activeChatId = id;
+};
+
+let notifyCallbacks = [];
+
+/**
+ * Screens (MessagesScreen, tab badges, etc.) can subscribe
+ * to "message arrived for other conversations"
+ */
+export const onNotify = (cb) => {
+  notifyCallbacks.push(cb);
+};
+
 export const connectSocket = async () => {
   try {
     const token = await AsyncStorage.getItem("token");
-    const userId = Number(await AsyncStorage.getItem("userId"));
 
     if (socket && socket.connected) return socket;
 
@@ -25,18 +42,17 @@ export const connectSocket = async () => {
     socket = io(BASE_URL, {
       path: "/socket.io",
       transports: ["websocket"],
-      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
       forceNew: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 500,
+      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
     socket.on("connect", async () => {
-      const finalUserId = Number(await AsyncStorage.getItem("userId"));
-
-      if (finalUserId && socket.connected) {
-        socket.emit("identify", { userId: finalUserId });
+      const userId = Number(await AsyncStorage.getItem("userId"));
+      if (userId) {
+        socket.emit("chat_identify", { userId });
       }
 
       try {
@@ -47,11 +63,15 @@ export const connectSocket = async () => {
     });
 
     socket.on("disconnect", (reason) => {
-      console.log("APP SOCKET = DISCONNECTED", reason);
+      console.log("APP SOCKET DISCONNECTED:", reason);
     });
 
-    socket.on("identify_ack", (data) => {
-      console.log("[SOCKET] identify_ack =", data);
+    // -------- NEW: notification handler --------
+    socket.on("newMessage", (msg) => {
+      // If the message belongs to another conversation → notify
+      if (msg.conversationId !== activeChatId) {
+        notifyCallbacks.forEach((fn) => fn(msg));
+      }
     });
 
     return socket;

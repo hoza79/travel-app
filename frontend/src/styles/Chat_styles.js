@@ -2,52 +2,93 @@ import { StyleSheet } from "react-native";
 
 export default StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: "#061237",
+  },
+
+  header: {
     flexDirection: "row",
     alignItems: "center",
+    padding: 15,
     backgroundColor: "#061237",
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "rgba(255,255,255,0.05)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
   },
 
-  profilePicture: {
-    width: 60,
-    height: 60,
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: "white",
-    overflow: "hidden",
+  headerImage: {
+    width: 45,
+    height: 45,
+    borderRadius: 25,
+    marginRight: 10,
   },
 
-  profileImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  textContainer: {
-    flex: 1,
-    marginLeft: 10,
-  },
-
-  name: {
+  headerName: {
+    fontSize: 18,
     color: "white",
-    fontSize: 17,
+    fontWeight: "600",
+  },
+
+  messagesContainer: {
+    flex: 1,
+    paddingHorizontal: 15,
+    paddingTop: 10,
+  },
+
+  messageBubble: {
+    maxWidth: "75%",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    marginBottom: 12,
+  },
+
+  myMessage: {
+    alignSelf: "flex-end",
+    backgroundColor: "#4C8BFF",
+  },
+
+  theirMessage: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+
+  messageText: {
+    color: "white",
+    fontSize: 16,
+  },
+
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    backgroundColor: "#061237",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+
+  input: {
+    flex: 1,
+    height: 45,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    color: "white",
+  },
+
+  sendButton: {
+    marginLeft: 10,
+    width: 45,
+    height: 45,
+    backgroundColor: "#4C8BFF",
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sendText: {
+    color: "white",
+    fontSize: 20,
     fontWeight: "bold",
-  },
-
-  lastMessage: {
-    color: "rgb(87,107,134)",
-    fontSize: 15,
-    marginTop: 2,
-  },
-
-  dateContainer: {
-    alignItems: "flex-end",
-  },
-
-  date: {
-    color: "rgb(87,107,134)",
-    fontSize: 14,
   },
 });
