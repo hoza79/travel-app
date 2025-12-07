@@ -31,6 +31,11 @@ const TravelCard = ({
   embeddedMode,
   notifType,
   interestRequestId,
+
+  // ⭐ ADDED FOR FIX
+  senderId,
+  senderName,
+  senderPhoto,
 }) => {
   if (!tripId || isNaN(Number(tripId))) {
     console.log("❌ INVALID tripId passed to TravelCard:", tripId);
@@ -225,6 +230,12 @@ const TravelCard = ({
 
   const buttonDisabled = isOwner || status === "pending" || isRequesting;
 
+  // ⭐ FIX: Decide the correct messaging target
+  const chatUserId = embeddedMode && senderId ? senderId : creatorId;
+  const chatUserName = embeddedMode && senderName ? senderName : firstName;
+  const chatUserPhoto =
+    embeddedMode && senderPhoto ? senderPhoto : profilePhoto;
+
   return (
     <TouchableOpacity activeOpacity={0.9}>
       <View style={styles.container}>
@@ -358,7 +369,7 @@ const TravelCard = ({
               </View>
             )}
 
-          {/* BOTTOM SEND MESSAGE / INTEREST BUTTON */}
+          {/* HOME FEED BUTTON */}
           {!embeddedMode && !isOwner && (
             <TouchableOpacity
               style={[
@@ -399,7 +410,7 @@ const TravelCard = ({
             </TouchableOpacity>
           )}
 
-          {/* NOTIFICATION MODE: ACCEPTED → SHOW SEND MESSAGE BUTTON */}
+          {/* NOTIFICATION MODE BUTTON */}
           {embeddedMode &&
             (notifType === "interest_accepted" ||
               (notifType === "interest_request" &&
@@ -420,7 +431,7 @@ const TravelCard = ({
                       "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                      otherUserId: creatorId,
+                      otherUserId: chatUserId, // ⭐ FIXED
                     }),
                   });
 
@@ -429,9 +440,9 @@ const TravelCard = ({
 
                   navigation.navigate("Chat", {
                     conversationId,
-                    receiverId: creatorId,
-                    receiverName: firstName,
-                    receiverPhoto: profilePhoto,
+                    receiverId: chatUserId,
+                    receiverName: chatUserName,
+                    receiverPhoto: chatUserPhoto,
                   });
                 }}
               >

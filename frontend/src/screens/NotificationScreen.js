@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useIsFocused } from "@react-navigation/native";
 import { getSocket, onSocketReady } from "../socket";
 import BASE_URL from "../config/api";
 import { NotificationContext } from "../context/NotificationContext";
@@ -20,15 +21,15 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState([]);
   const { setUnreadCount } = useContext(NotificationContext);
 
-  // popup
+  const isFocused = useIsFocused();
+
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [popupLoading, setPopupLoading] = useState(false);
 
-  // 🌟 FIX: No unreadCount changes here!
   const load = async () => {
     const token = await AsyncStorage.getItem("token");
     try {
-      const res = await fetch(`${BASE_URL}/notifications`, {
+      const res = await fetch(`${BASE_URL}/notifications/all`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -42,7 +43,6 @@ export default function NotificationsScreen() {
     if (!notification) return;
 
     const tripId = notification.trip_id;
-
     setPopupLoading(true);
 
     try {
@@ -52,12 +52,22 @@ export default function NotificationsScreen() {
       });
       const tripData = await res.json();
 
+      // ⭐ ADD THESE 3 FIELDS
+      const senderId = notification.sender_id;
+      const senderName = notification.sender_name;
+      const senderPhoto = notification.sender_photo;
+
       setSelectedTrip({
         ...tripData,
         tripId: tripData.id,
         creatorId: tripData.creator_id,
         interestRequestId: notification.interest_request_id,
         notifType: notification.type,
+
+        // ⭐ REQUIRED FIX FOR CORRECT CHAT TARGET
+        senderId,
+        senderName,
+        senderPhoto,
       });
     } catch (err) {
       console.log("Popup load error:", err);
@@ -72,19 +82,13 @@ export default function NotificationsScreen() {
     load();
   }, []);
 
-  // 🌟 FIX: No unread increments from here anymore
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
-      socket.on("new_notification", () => {
-        load(); // refresh list only
-      });
-
-      socket.on("notification_deleted", () => {
-        load();
-      });
+      socket.on("new_notification", () => load());
+      socket.on("notification_deleted", () => load());
     });
 
     return () => {
@@ -94,10 +98,11 @@ export default function NotificationsScreen() {
     };
   }, []);
 
-  // 🌟 When user opens this screen, reset unread to 0
   useEffect(() => {
-    setUnreadCount(0);
-  }, []);
+    if (isFocused) {
+      setUnreadCount(0);
+    }
+  }, [isFocused]);
 
   if (!notifications || notifications.length === 0) {
     return (
@@ -135,7 +140,6 @@ export default function NotificationsScreen() {
 
             {n.type === "interest_request" && (
               <View style={styles.buttonsRowCircle}>
-                {/* ACCEPT */}
                 <TouchableOpacity
                   onPress={async () => {
                     const token = await AsyncStorage.getItem("token");
@@ -160,7 +164,6 @@ export default function NotificationsScreen() {
                   <Text style={styles.circleText}>✓</Text>
                 </TouchableOpacity>
 
-                {/* DECLINE */}
                 <TouchableOpacity
                   onPress={() => {
                     setNotifications((prev) =>
@@ -197,6 +200,10 @@ export default function NotificationsScreen() {
                       creatorId={selectedTrip?.creatorId}
                       notifType={selectedTrip?.notifType}
                       interestRequestId={selectedTrip?.interestRequestId}
+                      // ⭐ ADD THESE 3 LINES
+                      senderId={selectedTrip?.senderId}
+                      senderName={selectedTrip?.senderName}
+                      senderPhoto={selectedTrip?.senderPhoto}
                     />
                   </ScrollView>
                 )}

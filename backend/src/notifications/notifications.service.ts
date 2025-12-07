@@ -27,8 +27,8 @@ export class NotificationsService {
     const [res]: any = await this.db.query(
       `
         INSERT INTO notifications 
-        (receiver_id, sender_id, trip_id, type, message, interest_request_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (receiver_id, sender_id, trip_id, type, message, interest_request_id, is_read)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
       `,
       [receiverId, senderId, tripId, type, message, interestRequestId],
     );
@@ -53,24 +53,43 @@ export class NotificationsService {
         notif.created_at = notif.created_at.toISOString();
       }
 
-      // Send via gateway to all sockets for receiver
       try {
         this.gateway.sendNotification(receiverId, notif);
-        this.logger.log(
-          `Notification emitted to user ${receiverId} (id=${insertedId})`,
-        );
       } catch (e) {
-        this.logger.error('Failed to emit notification via gateway', e as any);
+        this.logger.error('Emit failed', e as any);
       }
-    } else {
-      this.logger.warn(
-        `Inserted notification id ${insertedId} not found in DB SELECT`,
-      );
     }
 
     return notif;
   }
 
+  // unread (badge)
+  async findUnread(receiverId: number) {
+    const [rows]: any = await this.db.query(
+      `
+        SELECT 
+          notifications.*,
+          users.first_name AS sender_name,
+          users.profile_photo AS sender_photo
+        FROM notifications
+        JOIN users ON notifications.sender_id = users.id
+        WHERE notifications.receiver_id = ?
+        AND notifications.is_read = 0
+        ORDER BY notifications.created_at DESC
+      `,
+      [receiverId],
+    );
+
+    return rows.map((r) => ({
+      ...r,
+      created_at:
+        r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : r.created_at,
+    }));
+  }
+
+  // full list (screen)
   async findAll(receiverId: number) {
     const [rows]: any = await this.db.query(
       `
@@ -86,11 +105,25 @@ export class NotificationsService {
       [receiverId],
     );
 
-    (rows || []).forEach((r) => {
-      if (r.created_at instanceof Date)
-        r.created_at = r.created_at.toISOString();
-    });
+    return rows.map((r) => ({
+      ...r,
+      created_at:
+        r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : r.created_at,
+    }));
+  }
 
-    return rows;
+  async markAllRead(receiverId: number) {
+    await this.db.query(
+      `
+        UPDATE notifications
+        SET is_read = 1
+        WHERE receiver_id = ?
+      `,
+      [receiverId],
+    );
+
+    return { success: true };
   }
 }

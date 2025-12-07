@@ -25,8 +25,6 @@ const HomeScreen = () => {
 
   const fetchAll = async (lat, lng) => {
     try {
-      console.log("🔥 Fetching trips + photos...");
-
       const [tripsRes, photosRes] = await Promise.all([
         fetch(`${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`),
         fetch(`${BASE_URL}/post/photos?lat=${lat}&lng=${lng}`),
@@ -34,9 +32,6 @@ const HomeScreen = () => {
 
       const trips = await tripsRes.json();
       const rawPhotos = await photosRes.json();
-
-      console.log("🚗 Trips returned:", trips);
-      console.log("📸 Photos returned:", rawPhotos);
 
       const photos = Array.isArray(rawPhotos) ? rawPhotos : [];
 
@@ -47,8 +42,6 @@ const HomeScreen = () => {
       ];
 
       merged.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-
-      console.log("🔥 FINAL merged list:", merged);
 
       setItems(merged);
     } catch (error) {
