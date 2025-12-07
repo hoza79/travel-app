@@ -1,3 +1,4 @@
+// src/post/post.controller.ts
 import {
   Controller,
   Get,
@@ -30,10 +31,7 @@ export class PostController {
     return this.postService.findAll();
   }
 
-  // =======================================================
-  // STATIC ROUTES MUST COME BEFORE :id
-  // =======================================================
-
+  // ---------- STATIC ROUTES (MUST BE BEFORE :id) ----------
   @Get('nearby')
   findNearby(@Query('lat') lat?: string, @Query('lng') lng?: string) {
     const parsedLat = lat ? Number(lat) : undefined;
@@ -51,40 +49,25 @@ export class PostController {
 
   @Get('user/:id')
   findByUser(@Param('id') id: string) {
-    const parsed = Number(id);
-    if (isNaN(parsed)) {
-      throw new BadRequestException('Invalid user id');
-    }
-    return this.postService.findByUser(parsed);
+    return this.postService.findByUser(Number(id));
   }
 
   @Get('my-trips')
   findMyTrips(@Req() req) {
-    const userId = verifyToken(req);
-    return this.postService.findMyTrips(userId);
+    return this.postService.findMyTrips(verifyToken(req));
   }
 
+  // ---------- PHOTOS ----------
   @Post('photo')
-  createPhoto(@Req() req, @Body() createPhotoDto: CreatePhotoDto) {
-    const userId = verifyToken(req);
-    return this.postService.createPhoto(createPhotoDto, userId);
+  createPhoto(@Req() req, @Body() dto: CreatePhotoDto) {
+    return this.postService.createPhoto(dto, verifyToken(req));
   }
 
   @Get('photos')
   getAllPhotos(@Query('lat') lat?: string, @Query('lng') lng?: string) {
-    const parsedLat = lat ? Number(lat) : undefined;
-    const parsedLng = lng ? Number(lng) : undefined;
-
-    if (lat && Number.isNaN(parsedLat)) {
-      throw new BadRequestException('lat must be a valid number');
-    }
-    if (lng && Number.isNaN(parsedLng)) {
-      throw new BadRequestException('lng must be a valid number');
-    }
-
     return this.postService.getAllPhotos(
-      parsedLat ?? undefined,
-      parsedLng ?? undefined,
+      lat ? Number(lat) : undefined,
+      lng ? Number(lng) : undefined,
     );
   }
 
@@ -93,18 +76,21 @@ export class PostController {
     return this.postService.getPhotosByUser(Number(userId));
   }
 
-  // =======================================================
-  // DYNAMIC ROUTE (MUST BE LAST)
-  // =======================================================
+  // ---------- DELETE (must be BEFORE :id but AFTER static routes) ----------
+  @Delete(':id')
+  delete(@Req() req, @Param('id') id: string) {
+    const userId = verifyToken(req);
+    const parsed = Number(id);
+    if (Number.isNaN(parsed)) throw new BadRequestException('Invalid trip id');
 
+    return this.postService.delete(parsed, userId); // ✅ CORRECT
+  }
+
+  // ---------- THIS MUST BE LAST ----------
   @Get(':id')
   findOne(@Param('id') id: string) {
-    const parsedId = Number(id);
-
-    if (!id || Number.isNaN(parsedId)) {
-      throw new BadRequestException('Invalid trip id');
-    }
-
-    return this.postService.findOne(parsedId);
+    const parsed = Number(id);
+    if (Number.isNaN(parsed)) throw new BadRequestException('Invalid trip id');
+    return this.postService.findOne(parsed);
   }
 }

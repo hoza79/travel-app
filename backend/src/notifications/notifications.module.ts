@@ -1,3 +1,4 @@
+// src/notifications/notifications.module.ts
 import { Module } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
@@ -8,6 +9,8 @@ import { DatabaseModule } from '../database/database.module';
   imports: [DatabaseModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsGateway],
-  exports: [NotificationsService],
+
+  // ⭐ FIX: Export the gateway so other modules (PostModule) can use it
+  exports: [NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}

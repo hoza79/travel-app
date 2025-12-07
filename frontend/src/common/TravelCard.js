@@ -1,6 +1,13 @@
 // src/common/TravelCard.js
-import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  Animated,
+  ActivityIndicator,
+} from "react-native";
 import styles from "../styles/TravelCard_styles";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -32,23 +39,39 @@ const TravelCard = ({
   notifType,
   interestRequestId,
 
-  // ⭐ ADDED FOR FIX
+  // Used in notification popup
   senderId,
   senderName,
   senderPhoto,
+
+  // NEW for collapse animation
+  onTripDeleted,
 }) => {
   if (!tripId || isNaN(Number(tripId))) {
     console.log("❌ INVALID tripId passed to TravelCard:", tripId);
     return null;
   }
 
+  const navigation = useNavigation();
+
+  // -----------------------------------
+  // STATE
+  // -----------------------------------
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState(initialStatus ?? null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const navigation = useNavigation();
+  // -----------------------------------
+  // ANIMATION VALUES
+  // -----------------------------------
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const collapseAnim = useRef(new Animated.Value(1)).current;
 
+  // -----------------------------------
+  // LOAD USER ID
+  // -----------------------------------
   useEffect(() => {
     const loadUser = async () => {
       const storedId = await AsyncStorage.getItem("userId");
@@ -59,6 +82,9 @@ const TravelCard = ({
 
   const isOwner = currentUserId === creatorId;
 
+  // -----------------------------------
+  // STATUS LOADING
+  // -----------------------------------
   useEffect(() => {
     if (initialStatus !== undefined) {
       setStatus(initialStatus);
@@ -91,6 +117,9 @@ const TravelCard = ({
     loadStatus();
   }, [tripId]);
 
+  // -----------------------------------
+  // SOCKET LISTENERS
+  // -----------------------------------
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -119,9 +148,11 @@ const TravelCard = ({
     });
   }, [tripId]);
 
+  // -----------------------------------
+  // SEND INTEREST
+  // -----------------------------------
   const handleInterest = async () => {
-    if (isRequesting) return;
-    if (status === "pending" || status === "accepted") return;
+    if (isRequesting || status === "pending" || status === "accepted") return;
 
     setIsRequesting(true);
     try {
@@ -134,16 +165,12 @@ const TravelCard = ({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ tripId: tripId, ownerId: creatorId }),
+        body: JSON.stringify({ tripId, ownerId: creatorId }),
       });
 
       const data = await res.json();
-
-      if (data && data.status) {
-        setStatus(data.status);
-      } else {
-        setStatus("pending");
-      }
+      if (data?.status) setStatus(data.status);
+      else setStatus("pending");
     } catch (err) {
       console.log("Error:", err);
     } finally {
@@ -151,41 +178,48 @@ const TravelCard = ({
     }
   };
 
-  const handleAccept = async () => {
-    const token = await AsyncStorage.getItem("token");
-    try {
-      await fetch(`${BASE_URL}/interest_requests/${interestRequestId}/accept`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  // -----------------------------------
+  // DELETE TRIP (with collapse animation)
+  // -----------------------------------
+  const handleDeleteTrip = async () => {
+    if (isDeleting) return;
 
-      setStatus("accepted");
-    } catch (err) {
-      console.log("Accept error:", err);
-    }
-  };
+    setIsDeleting(true);
 
-  const handleDecline = async () => {
-    const token = await AsyncStorage.getItem("token");
     try {
-      await fetch(`${BASE_URL}/interest_requests/${interestRequestId}`, {
+      const token = await AsyncStorage.getItem("token");
+
+      await fetch(`${BASE_URL}/post/${tripId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      setStatus(null);
+      // Animate the collapse
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(collapseAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        if (onTripDeleted) onTripDeleted(tripId);
+      });
     } catch (err) {
-      console.log("Decline error:", err);
+      console.log("❌ Delete trip error:", err);
+      setIsDeleting(false);
     }
   };
 
-  const originCity = from ? from.split(",")[0].trim() : "";
-  const destinationCity = to ? to.split(",")[0].trim() : "";
+  // -----------------------------------
+  // FORMAT UI VALUES
+  // -----------------------------------
+  const originCity = from?.split(",")[0]?.trim() || "";
+  const destinationCity = to?.split(",")[0]?.trim() || "";
 
   const originFlag = getFlagForLocation(from);
   const destinationFlag = getFlagForLocation(to);
@@ -210,14 +244,12 @@ const TravelCard = ({
         setAvatarSource({ uri: profilePhoto });
         return;
       }
-
       const stored = await AsyncStorage.getItem("profilePhoto");
       if (stored) {
         setAvatarSource({ uri: stored });
         return;
       }
     };
-
     loadAvatar();
   }, [profilePhoto]);
 
@@ -228,18 +260,27 @@ const TravelCard = ({
       ? "Pending"
       : "Send Message";
 
-  const buttonDisabled = isOwner || status === "pending" || isRequesting;
-
-  // ⭐ FIX: Decide the correct messaging target
   const chatUserId = embeddedMode && senderId ? senderId : creatorId;
   const chatUserName = embeddedMode && senderName ? senderName : firstName;
   const chatUserPhoto =
     embeddedMode && senderPhoto ? senderPhoto : profilePhoto;
 
+  // -----------------------------------
+  // RENDER
+  // -----------------------------------
   return (
-    <TouchableOpacity activeOpacity={0.9}>
-      <View style={styles.container}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scaleY: collapseAnim }],
+        },
+      ]}
+    >
+      <TouchableOpacity activeOpacity={0.9}>
         <View>
+          {/* PROFILE HEADER */}
           <View style={styles.rowCenter}>
             <TouchableOpacity
               onPress={() =>
@@ -265,6 +306,7 @@ const TravelCard = ({
             </View>
           </View>
 
+          {/* LOGO + DISTANCE */}
           <View style={styles.logoContainer}>
             <Image
               source={require("../assets/logo.png")}
@@ -277,181 +319,107 @@ const TravelCard = ({
               </Text>
             )}
           </View>
-        </View>
 
-        <View style={styles.destination}>
-          <Text
-            style={styles.destinationText}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
+          {/* DESTINATION */}
+          <View style={styles.destination}>
+            <Text
+              style={styles.destinationText}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {originCity} {originFlag} → {destinationCity} {destinationFlag}
+            </Text>
+            <Text style={styles.date}>{formattedDate}</Text>
+          </View>
+
+          {/* DESCRIPTION EXPAND */}
+          <TouchableOpacity
+            style={styles.description}
+            onPress={() => setExpanded(!expanded)}
           >
-            {originCity} {originFlag} → {destinationCity} {destinationFlag}
-          </Text>
-          <Text style={styles.date}>{formattedDate}</Text>
-        </View>
+            <Text
+              style={styles.descriptionText}
+              numberOfLines={expanded ? undefined : 3}
+            >
+              {description}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.description}
-          onPress={() => setExpanded(!expanded)}
-        >
-          <Text
-            style={styles.descriptionText}
-            numberOfLines={expanded ? undefined : 3}
-          >
-            {description}
-          </Text>
-        </TouchableOpacity>
+          {/* FOOTER */}
+          <View style={styles.footer}>
+            <Text style={styles.seatsAvailable}>
+              {seatsAvailable} Seats available
+            </Text>
 
-        <View style={styles.footer}>
-          <Text style={styles.seatsAvailable}>
-            {seatsAvailable} Seats available
-          </Text>
-
-          {/* OWNER: Accept / Decline */}
-          {embeddedMode &&
-            notifType === "interest_request" &&
-            isOwner &&
-            status !== "accepted" && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 14,
-                  alignItems: "center",
-                  marginTop: 10,
-                }}
+            {/* OWNER DELETE BUTTON */}
+            {isOwner && (
+              <TouchableOpacity
+                onPress={handleDeleteTrip}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: "#d11",
+                    width: 120,
+                  },
+                ]}
               >
-                <TouchableOpacity
-                  onPress={handleAccept}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: "white",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: "#061237",
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginTop: -2,
-                    }}
-                  >
-                    ✓
+                {isDeleting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={[styles.buttonText, { color: "white" }]}>
+                    Delete
                   </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleDecline}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: "white",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: "#061237",
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginTop: -2,
-                    }}
-                  >
-                    ✕
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                )}
+              </TouchableOpacity>
             )}
 
-          {/* HOME FEED BUTTON */}
-          {!embeddedMode && !isOwner && (
-            <TouchableOpacity
-              style={[
-                styles.button,
-                buttonDisabled ? { opacity: 0.6 } : undefined,
-              ]}
-              onPress={async () => {
-                if (status === "accepted") {
-                  const token = await AsyncStorage.getItem("token");
-
-                  const res = await fetch(`${BASE_URL}/conversations/start`, {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      otherUserId: creatorId,
-                    }),
-                  });
-
-                  const data = await res.json();
-                  const conversationId = data.conversationId;
-
-                  navigation.navigate("Chat", {
-                    conversationId,
-                    receiverId: creatorId,
-                    receiverName: firstName,
-                    receiverPhoto: profilePhoto,
-                  });
-                } else {
-                  handleInterest();
-                }
-              }}
-              disabled={buttonDisabled}
-            >
-              <Text style={styles.buttonText}>{buttonLabel}</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* NOTIFICATION MODE BUTTON */}
-          {embeddedMode &&
-            (notifType === "interest_accepted" ||
-              (notifType === "interest_request" &&
-                isOwner &&
-                status === "accepted")) && (
+            {/* NON-OWNER BUTTONS */}
+            {!embeddedMode && !isOwner && (
               <TouchableOpacity
                 style={[
                   styles.button,
-                  { backgroundColor: "white", opacity: 1 },
+                  isRequesting || status === "pending"
+                    ? { opacity: 0.6 }
+                    : undefined,
                 ]}
                 onPress={async () => {
-                  const token = await AsyncStorage.getItem("token");
+                  if (status === "accepted") {
+                    const token = await AsyncStorage.getItem("token");
 
-                  const res = await fetch(`${BASE_URL}/conversations/start`, {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      otherUserId: chatUserId, // ⭐ FIXED
-                    }),
-                  });
+                    const res = await fetch(`${BASE_URL}/conversations/start`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        otherUserId: creatorId,
+                      }),
+                    });
 
-                  const data = await res.json();
-                  const conversationId = data.conversationId;
+                    const data = await res.json();
+                    const conversationId = data.conversationId;
 
-                  navigation.navigate("Chat", {
-                    conversationId,
-                    receiverId: chatUserId,
-                    receiverName: chatUserName,
-                    receiverPhoto: chatUserPhoto,
-                  });
+                    navigation.navigate("Chat", {
+                      conversationId,
+                      receiverId: creatorId,
+                      receiverName: firstName,
+                      receiverPhoto: profilePhoto,
+                    });
+                  } else {
+                    handleInterest();
+                  }
                 }}
+                disabled={isRequesting || status === "pending"}
               >
-                <Text style={styles.buttonText}>Send Message</Text>
+                <Text style={styles.buttonText}>{buttonLabel}</Text>
               </TouchableOpacity>
             )}
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 

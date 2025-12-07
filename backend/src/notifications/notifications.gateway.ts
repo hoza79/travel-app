@@ -29,7 +29,7 @@ export class NotificationsGateway
 
   handleConnection(client: Socket) {
     try {
-      // Try to extract token from handshake headers first (if provided)
+      // Try to extract token directly from handshake
       let tokenUserId: number | null = null;
       try {
         tokenUserId = verifySocketToken(client);
@@ -56,7 +56,6 @@ export class NotificationsGateway
             this.logger.log(
               `Identify received: mapped user ${uid} -> socket ${client.id}`,
             );
-            // Ack back so client knows mapping succeeded
             client.emit('identify_ack', { success: true, userId: uid });
           } else {
             this.logger.debug(
@@ -154,5 +153,13 @@ export class NotificationsGateway
         `No connected sockets for user ${userId}, cannot emit deletion`,
       );
     }
+  }
+
+  // ------------------------------------------------------
+  // ⭐ NEW: BROADCAST TRIP DELETION TO ALL USERS
+  // ------------------------------------------------------
+  sendTripDeleted(tripId: number) {
+    this.logger.log(`Broadcasting trip_deleted tripId=${tripId}`);
+    this.server.emit('trip_deleted', { tripId });
   }
 }

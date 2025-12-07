@@ -3,16 +3,23 @@ import {
   Inject,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
+import type { Pool } from 'mysql2/promise';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import type { Pool } from 'mysql2/promise';
 import { getCoordinates } from 'src/utils/geocoding.utils';
 import { CreatePhotoDto } from './dto/create-photo.dto';
 
+// ⭐ Add this import so we can broadcast trip deletion
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
+
 @Injectable()
 export class PostService {
-  constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
+  constructor(
+    @Inject('DATABASE_CONNECTION') private readonly db: Pool,
+    private readonly notificationsGateway: NotificationsGateway, // ⭐ inject gateway
+  ) {}
 
   async create(createPostDto: CreatePostDto, userId: number) {
     const { from, to, date, seatsAvailable, description, type } = createPostDto;
@@ -180,6 +187,51 @@ export class PostService {
     }
   }
 
+  // ---------------------------------------------------
+  // ⭐ NEW: DELETE TRIP (with ownership check + broadcast)
+  // ---------------------------------------------------
+  // ---------------------------------------------------
+  // DELETE TRIP (safe delete with FK cleanup)
+  // ---------------------------------------------------
+  async delete(tripId: number, userId: number) {
+    try {
+      // 1️⃣ Verify ownership
+      const [rows]: any = await this.db.query(
+        'SELECT creator_id FROM trips WHERE id = ? LIMIT 1',
+        [tripId],
+      );
+
+      if (!rows || rows.length === 0) {
+        throw new NotFoundException('Trip not found');
+      }
+
+      if (rows[0].creator_id !== userId) {
+        throw new ForbiddenException('You cannot delete this trip');
+      }
+
+      // 2️⃣ DELETE all notifications linked to the trip
+      await this.db.query('DELETE FROM notifications WHERE trip_id = ?', [
+        tripId,
+      ]);
+
+      // 3️⃣ DELETE interest requests linked to this trip
+      await this.db.query('DELETE FROM interest_requests WHERE trip_id = ?', [
+        tripId,
+      ]);
+
+      // 4️⃣ Now delete the trip safely
+      await this.db.query('DELETE FROM trips WHERE id = ?', [tripId]);
+
+      // 5️⃣ Broadcast real-time deletion
+      this.notificationsGateway.sendTripDeleted(tripId);
+
+      return { message: 'Trip deleted successfully' };
+    } catch (error) {
+      console.error('❌ Database Error (delete):', error);
+      throw error;
+    }
+  }
+
   // ---------------------------
   // PHOTO SECTION
   // ---------------------------
@@ -216,7 +268,6 @@ export class PostService {
 
   async getAllPhotos(userLat?: number, userLng?: number) {
     try {
-      // 1. Missing location → fallback to created_at
       if (!userLat || !userLng) {
         const [rows]: any = await this.db.query(
           `SELECT 
@@ -234,7 +285,6 @@ export class PostService {
         return rows;
       }
 
-      // 2. Distance sorting
       const [rows]: any = await this.db.query(
         `SELECT 
             photos.id,

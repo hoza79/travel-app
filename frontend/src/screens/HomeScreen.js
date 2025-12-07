@@ -23,6 +23,17 @@ const HomeScreen = () => {
   const [userLat, setUserLat] = useState(null);
   const [userLng, setUserLng] = useState(null);
 
+  // ----------------------------------------------------
+  // DELETE HANDLER (fixes the big empty space)
+  // ----------------------------------------------------
+  const handleTripDeleted = (deletedId) => {
+    setItems((prev) => prev.filter((item) => item.id !== deletedId));
+    setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
+  };
+
+  // ----------------------------------------------------
+  // FETCH ALL TRIPS + PHOTOS
+  // ----------------------------------------------------
   const fetchAll = async (lat, lng) => {
     try {
       const [tripsRes, photosRes] = await Promise.all([
@@ -30,12 +41,11 @@ const HomeScreen = () => {
         fetch(`${BASE_URL}/post/photos?lat=${lat}&lng=${lng}`),
       ]);
 
-      const trips = await tripsRes.json();
-      const rawPhotos = await photosRes.json();
+      const trips = await tripsRes.json().catch(() => []);
+      const rawPhotos = await photosRes.json().catch(() => []);
 
       const photos = Array.isArray(rawPhotos) ? rawPhotos : [];
 
-      // --- FIX: Avoid overwriting item.type ---
       const merged = [
         ...trips.map((t) => ({ ...t, feedType: "trip" })),
         ...photos.map((p) => ({ ...p, feedType: "photo" })),
@@ -44,14 +54,16 @@ const HomeScreen = () => {
       merged.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
       setItems(merged);
-    } catch (error) {
-      console.error("❌ Fetch error:", error);
+    } catch (e) {
+      console.log("❌ Fetch error:", e);
     } finally {
       setRefreshing(false);
     }
   };
 
-  // Load once
+  // ----------------------------------------------------
+  // LOAD LOCATION + FETCH
+  // ----------------------------------------------------
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -64,26 +76,37 @@ const HomeScreen = () => {
       setUserLat(lat);
       setUserLng(lng);
 
-      await fetchAll(lat, lng);
+      fetchAll(lat, lng);
     })();
   }, []);
 
-  // Refresh on notifications
+  // ----------------------------------------------------
+  // SOCKET LISTENERS
+  // ----------------------------------------------------
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
-      const handler = () => {
+      socket.on("new_notification", () => {
         if (userLat && userLng) fetchAll(userLat, userLng);
-      };
+      });
 
-      socket.on("new_notification", handler);
-      return () => socket.off("new_notification", handler);
+      socket.on("trip_deleted", ({ tripId }) => {
+        console.log("🔥 Trip deleted event received:", tripId);
+        handleTripDeleted(tripId);
+      });
+
+      return () => {
+        socket.off("new_notification");
+        socket.off("trip_deleted");
+      };
     });
   }, [userLat, userLng]);
 
-  // Search filter
+  // ----------------------------------------------------
+  // SEARCH FILTER
+  // ----------------------------------------------------
   useEffect(() => {
     if (!search.trim()) {
       setFilteredItems(items);
@@ -101,6 +124,9 @@ const HomeScreen = () => {
     setFilteredItems(results);
   }, [search, items]);
 
+  // ----------------------------------------------------
+  // RENDER
+  // ----------------------------------------------------
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
@@ -125,7 +151,6 @@ const HomeScreen = () => {
             </View>
           }
           renderItem={({ item }) => {
-            // 🔥 PHOTO POST
             if (item.feedType === "photo") {
               return (
                 <PhotoCard
@@ -137,9 +162,8 @@ const HomeScreen = () => {
               );
             }
 
-            // 🔥 TRIP POST
             if (item.feedType === "trip") {
-              const tripLabel = item.trip_type || item.type || "trip"; // backend label
+              const tripLabel = item.trip_type || item.type || "trip";
 
               return (
                 <TravelCard
@@ -148,12 +172,13 @@ const HomeScreen = () => {
                   date={item.trip_date}
                   seatsAvailable={item.available_seats}
                   description={item.description}
-                  tripType={tripLabel} // <--- this FIXES “trip” showing everywhere
+                  tripType={tripLabel}
                   firstName={item.first_name}
                   distance={item.distance}
                   creatorId={item.creator_id}
                   tripId={item.id}
                   profilePhoto={item.profile_photo}
+                  onTripDeleted={handleTripDeleted} // ⭐ FIX ADDED
                 />
               );
             }
