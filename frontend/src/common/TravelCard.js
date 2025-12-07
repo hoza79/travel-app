@@ -1,4 +1,3 @@
-// src/common/TravelCard.js
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -58,6 +57,9 @@ const TravelCard = ({
   const [isRequesting, setIsRequesting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [acceptedCount, setAcceptedCount] = useState(0);
+  const [isFull, setIsFull] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const collapseAnim = useRef(new Animated.Value(1)).current;
 
@@ -74,6 +76,24 @@ const TravelCard = ({
   useEffect(() => {
     if (initialStatus !== undefined) setStatus(initialStatus);
   }, [initialStatus]);
+
+  const fetchAcceptedCount = async () => {
+    try {
+      const res = await fetch(
+        `${BASE_URL}/interest_requests/accepted_count/${tripId}`
+      );
+      const data = await res.json();
+      const count = data?.accepted ?? 0;
+      setAcceptedCount(count);
+      setIsFull(count >= seatsAvailable);
+    } catch (err) {
+      console.log("accepted_count error:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAcceptedCount();
+  }, [tripId]);
 
   useEffect(() => {
     if (initialStatus !== undefined) return;
@@ -106,18 +126,16 @@ const TravelCard = ({
 
       const handler = (notif) => {
         try {
-          if (
-            notif?.type === "interest_accepted" &&
-            notif?.trip_id === tripId
-          ) {
+          if (notif?.trip_id !== tripId) return;
+
+          if (notif?.type === "interest_accepted") {
             setStatus("accepted");
+            fetchAcceptedCount();
           }
 
-          if (
-            notif?.type === "interest_request_deleted" &&
-            notif?.trip_id === tripId
-          ) {
+          if (notif?.type === "interest_request_deleted") {
             setStatus(null);
+            fetchAcceptedCount();
           }
         } catch {}
       };
@@ -130,6 +148,7 @@ const TravelCard = ({
   const handleInterest = async () => {
     if (isRequesting) return;
     if (status === "pending" || status === "accepted") return;
+    if (isFull) return;
 
     setIsRequesting(true);
     try {
@@ -145,9 +164,16 @@ const TravelCard = ({
         body: JSON.stringify({ tripId, ownerId: creatorId }),
       });
 
+      if (res.status === 400) {
+        setIsFull(true);
+        return;
+      }
+
       const data = await res.json();
       if (data?.status) setStatus(data.status);
       else setStatus("pending");
+
+      fetchAcceptedCount();
     } catch (err) {
       console.log("Interest error:", err);
     } finally {
@@ -229,7 +255,6 @@ const TravelCard = ({
       ? "Pending"
       : "Send Message";
 
-  // ALWAYS chat with trip owner
   const chatUserId = creatorId;
   const chatUserName = firstName;
   const chatUserPhoto = profilePhoto;
@@ -329,50 +354,74 @@ const TravelCard = ({
               </TouchableOpacity>
             )}
 
-            {/* FEED BUTTON */}
-            {!embeddedMode && !isOwner && (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  isRequesting || status === "pending"
-                    ? { opacity: 0.6 }
-                    : undefined,
-                ]}
-                disabled={isRequesting || status === "pending"}
-                onPress={async () => {
-                  if (status === "accepted") {
-                    const token = await AsyncStorage.getItem("token");
-
-                    const res = await fetch(`${BASE_URL}/conversations/start`, {
-                      method: "POST",
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        otherUserId: chatUserId,
-                      }),
-                    });
-
-                    const data = await res.json();
-                    const conversationId = data.conversationId;
-
-                    navigation.navigate("Chat", {
-                      conversationId,
-                      receiverId: chatUserId,
-                      receiverName: chatUserName,
-                      receiverPhoto: chatUserPhoto,
-                    });
-                  } else {
-                    handleInterest();
-                  }
+            {/* ⭐ FIXED FULL LOGIC — ONLY HERE CHANGED */}
+            {!embeddedMode && !isOwner && isFull && status !== "accepted" && (
+              <View
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.2)",
+                  paddingHorizontal: 18,
+                  paddingVertical: 10,
+                  borderRadius: 20,
+                  flexDirection: "row",
+                  alignItems: "center",
                 }}
               >
-                <Text style={styles.buttonText}>{buttonLabel}</Text>
-              </TouchableOpacity>
+                <Text style={{ color: "white", fontSize: 16, marginRight: 6 }}>
+                  🔒
+                </Text>
+                <Text style={{ color: "white", fontSize: 16 }}>Full</Text>
+              </View>
             )}
 
-            {/* NOTIFICATION: OWNER SEES ACCEPT / DECLINE */}
+            {/* USER BUTTONS */}
+            {!embeddedMode &&
+              !isOwner &&
+              !(isFull && status !== "accepted") && (
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    isRequesting || status === "pending"
+                      ? { opacity: 0.6 }
+                      : undefined,
+                  ]}
+                  disabled={isRequesting || status === "pending"}
+                  onPress={async () => {
+                    if (status === "accepted") {
+                      const token = await AsyncStorage.getItem("token");
+
+                      const res = await fetch(
+                        `${BASE_URL}/conversations/start`,
+                        {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            otherUserId: chatUserId,
+                          }),
+                        }
+                      );
+
+                      const data = await res.json();
+                      const conversationId = data.conversationId;
+
+                      navigation.navigate("Chat", {
+                        conversationId,
+                        receiverId: chatUserId,
+                        receiverName: chatUserName,
+                        receiverPhoto: chatUserPhoto,
+                      });
+                    } else {
+                      handleInterest();
+                    }
+                  }}
+                >
+                  <Text style={styles.buttonText}>{buttonLabel}</Text>
+                </TouchableOpacity>
+              )}
+
+            {/* — Notification Buttons Remain UNTOUCHED — */}
             {embeddedMode && notifType === "interest_request" && isOwner && (
               <View
                 style={{
@@ -396,6 +445,7 @@ const TravelCard = ({
                       }
                     );
                     setStatus("accepted");
+                    fetchAcceptedCount();
                   }}
                   style={{
                     width: 42,
@@ -429,6 +479,7 @@ const TravelCard = ({
                       }
                     );
                     setStatus(null);
+                    fetchAcceptedCount();
                   }}
                   style={{
                     width: 42,
@@ -453,7 +504,6 @@ const TravelCard = ({
               </View>
             )}
 
-            {/* NOTIFICATION: interest_accepted → ALWAYS SHOW SEND MESSAGE */}
             {embeddedMode && notifType === "interest_accepted" && (
               <TouchableOpacity
                 style={[
@@ -470,7 +520,7 @@ const TravelCard = ({
                       "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                      otherUserId: creatorId, // ALWAYS chat with trip owner
+                      otherUserId: creatorId,
                     }),
                   });
 

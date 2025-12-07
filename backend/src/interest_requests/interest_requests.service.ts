@@ -10,6 +10,20 @@ export class InterestRequestsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  // ⭐ NEW — count accepted requests
+  async getAcceptedCount(tripId: number) {
+    const [rows]: any = await this.db.query(
+      `
+      SELECT COUNT(*) AS accepted
+      FROM interest_requests
+      WHERE trip_id = ? AND status = 'accepted'
+      `,
+      [tripId],
+    );
+
+    return { accepted: rows[0].accepted ?? 0 };
+  }
+
   async create(dto: CreateInterestRequestDto, requesterId: number) {
     const { tripId, ownerId } = dto;
 
@@ -17,14 +31,26 @@ export class InterestRequestsService {
       throw new BadRequestException('Cannot request your own trip');
     }
 
-    // CHECK: if an interest request already exists for this trip + requester
+    // ⭐ prevent interest if full
+    const acceptedCount = (await this.getAcceptedCount(tripId)).accepted;
+
+    const [[trip]]: any = await this.db.query(
+      `SELECT available_seats FROM trips WHERE id = ?`,
+      [tripId],
+    );
+
+    if (!trip) throw new BadRequestException('Trip not found');
+
+    if (acceptedCount >= trip.available_seats) {
+      throw new BadRequestException('This trip is full');
+    }
+
     const [existingRows]: any = await this.db.query(
       `SELECT id, status FROM interest_requests WHERE trip_id = ? AND requester_id = ? LIMIT 1`,
       [tripId, requesterId],
     );
 
     if (existingRows && existingRows.length > 0) {
-      // return the existing state instead of inserting a duplicate
       const existing = existingRows[0];
       return { status: existing.status, interestRequestId: existing.id };
     }
@@ -72,11 +98,6 @@ export class InterestRequestsService {
       throw new Error('Invalid interest request id');
     }
 
-    await this.db.query(
-      `UPDATE interest_requests SET status = 'accepted' WHERE id = ?`,
-      [id],
-    );
-
     const [[req]]: any = await this.db.query(
       `
       SELECT requester_id, trip_id 
@@ -86,22 +107,41 @@ export class InterestRequestsService {
       [id],
     );
 
-    if (req) {
-      await this.db.query(
-        `DELETE FROM notifications WHERE interest_request_id = ?`,
-        [id],
-      );
+    if (!req) throw new BadRequestException('Request not found');
 
-      if (req.requester_id !== ownerId) {
-        await this.notificationsService.create({
-          receiverId: req.requester_id,
-          senderId: ownerId,
-          tripId: req.trip_id,
-          type: 'interest_accepted',
-          message: 'Your request was accepted!',
-          interestRequestId: id,
-        });
-      }
+    // ⭐ block accepting beyond available seats
+    const acceptedCount = (await this.getAcceptedCount(req.trip_id)).accepted;
+
+    const [[trip]]: any = await this.db.query(
+      `SELECT available_seats FROM trips WHERE id = ?`,
+      [req.trip_id],
+    );
+
+    if (!trip) throw new BadRequestException('Trip not found');
+
+    if (acceptedCount >= trip.available_seats) {
+      throw new BadRequestException('This trip is already full');
+    }
+
+    await this.db.query(
+      `UPDATE interest_requests SET status = 'accepted' WHERE id = ?`,
+      [id],
+    );
+
+    await this.db.query(
+      `DELETE FROM notifications WHERE interest_request_id = ?`,
+      [id],
+    );
+
+    if (req.requester_id !== ownerId) {
+      await this.notificationsService.create({
+        receiverId: req.requester_id,
+        senderId: ownerId,
+        tripId: req.trip_id,
+        type: 'interest_accepted',
+        message: 'Your request was accepted!',
+        interestRequestId: id,
+      });
     }
 
     return { status: 'accepted' };

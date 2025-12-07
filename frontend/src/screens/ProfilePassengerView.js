@@ -10,7 +10,7 @@ import {
 import styles from "../styles/ProfilePassengerView_styles";
 import PhotoGrid from "../common/PhotoGrid";
 import FullScreenImageViewer from "../common/FullScreenImageViewer";
-import Trip from "../common/Trip";
+import TravelCard from "../common/TravelCard"; // ⭐ NEW
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRoute, useFocusEffect } from "@react-navigation/native";
 import BASE_URL from "../config/api";
@@ -37,9 +37,6 @@ const ProfilePassengerView = () => {
   const route = useRoute();
   const passedUserId = route.params?.userId;
 
-  // -------------------------------------
-  // LOAD PROFILE (used by refresh + focus)
-  // -------------------------------------
   const loadProfile = async () => {
     try {
       setLoading(true);
@@ -96,18 +93,12 @@ const ProfilePassengerView = () => {
     }
   };
 
-  // --------------------
-  // FOCUS RE-FETCH FIX
-  // --------------------
   useFocusEffect(
     useCallback(() => {
       loadProfile();
     }, [passedUserId])
   );
 
-  // --------------------
-  // PULL TO REFRESH FIX
-  // --------------------
   const onRefresh = () => {
     setRefreshing(true);
     loadProfile();
@@ -223,18 +214,20 @@ const ProfilePassengerView = () => {
               </View>
             </View>
 
+            {/* ⭐ PHOTOS TAB */}
             {activeTab === "Photos" && (
               <View style={{ alignItems: "center", marginTop: 20 }}>
                 <PhotoGrid photos={photos} />
               </View>
             )}
 
+            {/* ⭐ TRIPS TAB — NOW USING TRAVELCARD */}
             {activeTab === "Trips" && (
               <FlatList
                 data={trips}
                 keyExtractor={(i) => i.id.toString()}
                 renderItem={({ item }) => (
-                  <Trip
+                  <TravelCard
                     from={item.origin}
                     to={item.destination}
                     date={item.trip_date}
@@ -242,6 +235,10 @@ const ProfilePassengerView = () => {
                     description={item.description}
                     tripType={item.type}
                     firstName={item.first_name}
+                    creatorId={item.creator_id}
+                    tripId={item.id}
+                    profilePhoto={item.profile_photo}
+                    embeddedMode={false} // ⭐ still clickable & functional
                   />
                 )}
                 scrollEnabled={false}
