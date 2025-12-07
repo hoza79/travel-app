@@ -30,6 +30,7 @@ export const NotificationProvider = ({ children }) => {
 
       const data = await res.json();
       const count = Array.isArray(data) ? data.length : 0;
+      console.log("[DEBUG] unread API response:", data);
 
       if (mountedRef.current) setUnreadCount(count);
     } catch {}

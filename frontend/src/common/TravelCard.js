@@ -39,39 +39,28 @@ const TravelCard = ({
   notifType,
   interestRequestId,
 
-  // Used in notification popup
   senderId,
   senderName,
   senderPhoto,
 
-  // NEW for collapse animation
   onTripDeleted,
 }) => {
   if (!tripId || isNaN(Number(tripId))) {
-    console.log("❌ INVALID tripId passed to TravelCard:", tripId);
+    console.log("❌ INVALID tripId passed:", tripId);
     return null;
   }
 
   const navigation = useNavigation();
 
-  // -----------------------------------
-  // STATE
-  // -----------------------------------
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState(initialStatus ?? null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // -----------------------------------
-  // ANIMATION VALUES
-  // -----------------------------------
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const collapseAnim = useRef(new Animated.Value(1)).current;
 
-  // -----------------------------------
-  // LOAD USER ID
-  // -----------------------------------
   useEffect(() => {
     const loadUser = async () => {
       const storedId = await AsyncStorage.getItem("userId");
@@ -82,13 +71,8 @@ const TravelCard = ({
 
   const isOwner = currentUserId === creatorId;
 
-  // -----------------------------------
-  // STATUS LOADING
-  // -----------------------------------
   useEffect(() => {
-    if (initialStatus !== undefined) {
-      setStatus(initialStatus);
-    }
+    if (initialStatus !== undefined) setStatus(initialStatus);
   }, [initialStatus]);
 
   useEffect(() => {
@@ -101,9 +85,7 @@ const TravelCard = ({
 
         const res = await fetch(
           `${BASE_URL}/interest_requests/status/${tripId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
         const data = await res.json();
@@ -117,9 +99,6 @@ const TravelCard = ({
     loadStatus();
   }, [tripId]);
 
-  // -----------------------------------
-  // SOCKET LISTENERS
-  // -----------------------------------
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -148,11 +127,9 @@ const TravelCard = ({
     });
   }, [tripId]);
 
-  // -----------------------------------
-  // SEND INTEREST
-  // -----------------------------------
   const handleInterest = async () => {
-    if (isRequesting || status === "pending" || status === "accepted") return;
+    if (isRequesting) return;
+    if (status === "pending" || status === "accepted") return;
 
     setIsRequesting(true);
     try {
@@ -172,18 +149,14 @@ const TravelCard = ({
       if (data?.status) setStatus(data.status);
       else setStatus("pending");
     } catch (err) {
-      console.log("Error:", err);
+      console.log("Interest error:", err);
     } finally {
       setIsRequesting(false);
     }
   };
 
-  // -----------------------------------
-  // DELETE TRIP (with collapse animation)
-  // -----------------------------------
   const handleDeleteTrip = async () => {
     if (isDeleting) return;
-
     setIsDeleting(true);
 
     try {
@@ -194,7 +167,6 @@ const TravelCard = ({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Animate the collapse
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -210,17 +182,13 @@ const TravelCard = ({
         if (onTripDeleted) onTripDeleted(tripId);
       });
     } catch (err) {
-      console.log("❌ Delete trip error:", err);
+      console.log("❌ Delete error:", err);
       setIsDeleting(false);
     }
   };
 
-  // -----------------------------------
-  // FORMAT UI VALUES
-  // -----------------------------------
   const originCity = from?.split(",")[0]?.trim() || "";
   const destinationCity = to?.split(",")[0]?.trim() || "";
-
   const originFlag = getFlagForLocation(from);
   const destinationFlag = getFlagForLocation(to);
 
@@ -244,6 +212,7 @@ const TravelCard = ({
         setAvatarSource({ uri: profilePhoto });
         return;
       }
+
       const stored = await AsyncStorage.getItem("profilePhoto");
       if (stored) {
         setAvatarSource({ uri: stored });
@@ -260,14 +229,11 @@ const TravelCard = ({
       ? "Pending"
       : "Send Message";
 
-  const chatUserId = embeddedMode && senderId ? senderId : creatorId;
-  const chatUserName = embeddedMode && senderName ? senderName : firstName;
-  const chatUserPhoto =
-    embeddedMode && senderPhoto ? senderPhoto : profilePhoto;
+  // ALWAYS chat with trip owner
+  const chatUserId = creatorId;
+  const chatUserName = firstName;
+  const chatUserPhoto = profilePhoto;
 
-  // -----------------------------------
-  // RENDER
-  // -----------------------------------
   return (
     <Animated.View
       style={[
@@ -280,7 +246,6 @@ const TravelCard = ({
     >
       <TouchableOpacity activeOpacity={0.9}>
         <View>
-          {/* PROFILE HEADER */}
           <View style={styles.rowCenter}>
             <TouchableOpacity
               onPress={() =>
@@ -306,7 +271,6 @@ const TravelCard = ({
             </View>
           </View>
 
-          {/* LOGO + DISTANCE */}
           <View style={styles.logoContainer}>
             <Image
               source={require("../assets/logo.png")}
@@ -320,7 +284,6 @@ const TravelCard = ({
             )}
           </View>
 
-          {/* DESTINATION */}
           <View style={styles.destination}>
             <Text
               style={styles.destinationText}
@@ -333,7 +296,6 @@ const TravelCard = ({
             <Text style={styles.date}>{formattedDate}</Text>
           </View>
 
-          {/* DESCRIPTION EXPAND */}
           <TouchableOpacity
             style={styles.description}
             onPress={() => setExpanded(!expanded)}
@@ -346,23 +308,16 @@ const TravelCard = ({
             </Text>
           </TouchableOpacity>
 
-          {/* FOOTER */}
           <View style={styles.footer}>
             <Text style={styles.seatsAvailable}>
               {seatsAvailable} Seats available
             </Text>
 
-            {/* OWNER DELETE BUTTON */}
+            {/* DELETE BUTTON */}
             {isOwner && (
               <TouchableOpacity
                 onPress={handleDeleteTrip}
-                style={[
-                  styles.button,
-                  {
-                    backgroundColor: "#d11",
-                    width: 120,
-                  },
-                ]}
+                style={[styles.button, { backgroundColor: "#d11", width: 120 }]}
               >
                 {isDeleting ? (
                   <ActivityIndicator color="white" />
@@ -374,7 +329,7 @@ const TravelCard = ({
               </TouchableOpacity>
             )}
 
-            {/* NON-OWNER BUTTONS */}
+            {/* FEED BUTTON */}
             {!embeddedMode && !isOwner && (
               <TouchableOpacity
                 style={[
@@ -383,6 +338,7 @@ const TravelCard = ({
                     ? { opacity: 0.6 }
                     : undefined,
                 ]}
+                disabled={isRequesting || status === "pending"}
                 onPress={async () => {
                   if (status === "accepted") {
                     const token = await AsyncStorage.getItem("token");
@@ -394,7 +350,7 @@ const TravelCard = ({
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({
-                        otherUserId: creatorId,
+                        otherUserId: chatUserId,
                       }),
                     });
 
@@ -403,17 +359,135 @@ const TravelCard = ({
 
                     navigation.navigate("Chat", {
                       conversationId,
-                      receiverId: creatorId,
-                      receiverName: firstName,
-                      receiverPhoto: profilePhoto,
+                      receiverId: chatUserId,
+                      receiverName: chatUserName,
+                      receiverPhoto: chatUserPhoto,
                     });
                   } else {
                     handleInterest();
                   }
                 }}
-                disabled={isRequesting || status === "pending"}
               >
                 <Text style={styles.buttonText}>{buttonLabel}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* NOTIFICATION: OWNER SEES ACCEPT / DECLINE */}
+            {embeddedMode && notifType === "interest_request" && isOwner && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 14,
+                  alignItems: "center",
+                  marginTop: 10,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={async () => {
+                    const token = await AsyncStorage.getItem("token");
+                    await fetch(
+                      `${BASE_URL}/interest_requests/${interestRequestId}/accept`,
+                      {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                      }
+                    );
+                    setStatus("accepted");
+                  }}
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 21,
+                    backgroundColor: "white",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#061237",
+                      fontSize: 22,
+                      fontWeight: "700",
+                      marginTop: -2,
+                    }}
+                  >
+                    ✓
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={async () => {
+                    const token = await AsyncStorage.getItem("token");
+                    await fetch(
+                      `${BASE_URL}/interest_requests/${interestRequestId}`,
+                      {
+                        method: "DELETE",
+                        headers: { Authorization: `Bearer ${token}` },
+                      }
+                    );
+                    setStatus(null);
+                  }}
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 21,
+                    backgroundColor: "white",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#061237",
+                      fontSize: 22,
+                      fontWeight: "700",
+                      marginTop: -2,
+                    }}
+                  >
+                    ✕
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* NOTIFICATION: interest_accepted → ALWAYS SHOW SEND MESSAGE */}
+            {embeddedMode && notifType === "interest_accepted" && (
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  { backgroundColor: "white", opacity: 1, marginTop: 10 },
+                ]}
+                onPress={async () => {
+                  const token = await AsyncStorage.getItem("token");
+
+                  const res = await fetch(`${BASE_URL}/conversations/start`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      otherUserId: creatorId, // ALWAYS chat with trip owner
+                    }),
+                  });
+
+                  const data = await res.json();
+                  const conversationId = data.conversationId;
+
+                  navigation.navigate("Chat", {
+                    conversationId,
+                    receiverId: creatorId,
+                    receiverName: firstName,
+                    receiverPhoto: profilePhoto,
+                  });
+                }}
+              >
+                <Text style={[styles.buttonText, { color: "#061237" }]}>
+                  Send Message
+                </Text>
               </TouchableOpacity>
             )}
           </View>

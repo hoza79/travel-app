@@ -1,1247 +1,382 @@
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  TextInput,
-  Image,
-  FlatList,
-} from "react-native";
-import React, { useState } from "react";
-import styles from "../styles/PostScreen_styles";
-import { useNavigation } from "@react-navigation/native";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import SuccessMessageBox from "../common/SuccessMessageBox";
-import { GOOGLE_API_KEY } from "@env";
-import BASE_URL from "../config/api";
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  ConnectedSocket,
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { Inject, Injectable } from '@nestjs/common';
+import type { Pool } from 'mysql2/promise';
 
-let fromTimeout;
-let toTimeout;
+@WebSocketGateway({
+  cors: { origin: '*' },
+})
+@Injectable()
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
 
-const PostScreen = () => {
-  const navigation = useNavigation();
+  constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
 
-  const [selectedMain, setSelectedMain] = useState("trip");
-  const [tripType, setTripType] = useState("Offering");
+  private clients = new Map<number, string>();
 
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [fromSuggestions, setFromSuggestions] = useState([]);
-  const [toSuggestions, setToSuggestions] = useState([]);
-  const [date, setDate] = useState("");
-  const [seatsAvailable, setSeatsAvailable] = useState("");
-  const [description, setDescription] = useState("");
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
+  // --------------------------------
+  // CONNECTIONS
+  // --------------------------------
+  handleConnection(client: Socket) {
+    console.log('Chat client connected:', client.id);
+  }
 
-  let timeouts = { from: null, to: null };
+  handleDisconnect(client: Socket) {
+    console.log('Chat client disconnected:', client.id);
 
-  const fetchSuggestions = async (query, type) => {
-    if (!query || query.length < 2) {
-      if (type === "from") setFromSuggestions([]);
-      else setToSuggestions([]);
-      return;
-    }
-
-    clearTimeout(timeouts[type]);
-    timeouts[type] = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-            query
-          )}&key=${GOOGLE_API_KEY}&language=en&types=(cities)`
-        );
-        const data = await res.json();
-
-        if (!data.predictions || data.predictions.length === 0) {
-          if (type === "from") setFromSuggestions([]);
-          else setToSuggestions([]);
-          return;
-        }
-
-        const simplified = data.predictions.map((item) => ({
-          id: item.place_id,
-          name: item.description,
-        }));
-
-        if (type === "from") setFromSuggestions(simplified);
-        else setToSuggestions(simplified);
-      } catch (e) {
-        console.error(`${type} fetch error:`, e);
+    for (const [userId, socketId] of this.clients.entries()) {
+      if (socketId === client.id) {
+        this.clients.delete(userId);
+        break;
       }
-    }, 100);
-  };
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerText}>Create Post</Text>
-        <Image source={require("../assets/logo.png")} style={styles.logo} />
-      </View>
-
-      <View style={styles.mainTabContainer}>
-        <TouchableOpacity
-          style={[
-            styles.mainTab,
-            selectedMain === "trip" && styles.activeMainTab,
-          ]}
-          onPress={() => setSelectedMain("trip")}
-        >
-          <Text
-            style={[
-              styles.mainTabText,
-              selectedMain === "trip" && styles.activeMainText,
-            ]}
-          >
-            Trip
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.mainTab,
-            selectedMain === "photo" && styles.activeMainTab,
-          ]}
-          onPress={() => setSelectedMain("photo")}
-        >
-          <Text
-            style={[
-              styles.mainTabText,
-              selectedMain === "photo" && styles.activeMainText,
-            ]}
-          >
-            Photo
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <KeyboardAvoidingView
-          style={styles.keyboardContainer}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          {selectedMain === "trip" && (
-            <View style={styles.tripInfoWrapper}>
-              <View style={styles.tripInfo}>
-                <View style={styles.subTabInsideBox}>
-                  <TouchableOpacity
-                    style={[
-                      styles.subTabSmall,
-                      tripType === "Offering" && styles.activeSubTab,
-                    ]}
-                    onPress={() => setTripType("Offering")}
-                  >
-                    <Text
-                      style={[
-                        styles.subText,
-                        tripType === "Offering" && styles.activeSubText,
-                      ]}
-                    >
-                      Offering
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.subTabSmall,
-                      tripType === "Searching" && styles.activeSubTab,
-                    ]}
-                    onPress={() => setTripType("Searching")}
-                  >
-                    <Text
-                      style={[
-                        styles.subText,
-                        tripType === "Searching" && styles.activeSubText,
-                      ]}
-                    >
-                      Searching
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={{ position: "relative", marginBottom: 10 }}>
-                  <View style={styles.inputContainer}>
-                    <Image
-                      source={require("../assets/mapIcon.png")}
-                      style={styles.icon}
-                    />
-                    <TextInput
-                      placeholder="From"
-                      placeholderTextColor="rgba(255,255,255,0.5)"
-                      style={styles.textInput}
-                      value={from}
-                      onChangeText={(text) => {
-                        setFrom(text);
-                        fetchSuggestions(text, "from");
-                      }}
-                      onFocus={() => setToSuggestions([])}
-                    />
-                  </View>
-                  {fromSuggestions.length > 0 && (
-                    <FlatList
-                      data={fromSuggestions}
-                      keyExtractor={(item) => item.id}
-                      style={styles.dropdown}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setFrom(item.name);
-                            setFromSuggestions([]);
-                          }}
-                        >
-                          <Text style={styles.dropdownText}>{item.name}</Text>
-                        </TouchableOpacity>
-                      )}
-                    />
-                  )}
-                </View>
-
-                <View style={{ position: "relative", marginBottom: 10 }}>
-                  <View style={styles.inputContainer}>
-                    <Image
-                      source={require("../assets/mapIcon.png")}
-                      style={styles.icon}
-                    />
-                    <TextInput
-                      placeholder="To"
-                      placeholderTextColor="rgba(255,255,255,0.5)"
-                      style={styles.textInput}
-                      value={to}
-                      onChangeText={(text) => {
-                        setTo(text);
-                        fetchSuggestions(text, "to");
-                      }}
-                      onFocus={() => setFromSuggestions([])}
-                    />
-                  </View>
-                  {toSuggestions.length > 0 && (
-                    <FlatList
-                      data={toSuggestions}
-                      keyExtractor={(item) => item.id}
-                      style={styles.dropdown}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setTo(item.name);
-                            setToSuggestions([]);
-                          }}
-                        >
-                          <Text style={styles.dropdownText}>{item.name}</Text>
-                        </TouchableOpacity>
-                      )}
-                    />
-                  )}
-                </View>
-
-                <View style={styles.dateAndSeatsContainer}>
-                  <View style={styles.dateAndIcon}>
-                    <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-                      <Image
-                        source={require("../assets/dateIcon.png")}
-                        style={styles.icon}
-                      />
-                    </TouchableOpacity>
-                    <TextInput
-                      placeholder="Date (YYYY-MM-DD)"
-                      placeholderTextColor="rgba(255,255,255,0.5)"
-                      style={styles.smallInput}
-                      value={date}
-                      editable={false}
-                    />
-                  </View>
-
-                  <TextInput
-                    placeholder={
-                      tripType === "Offering"
-                        ? "Seats available"
-                        : "Seats needed"
-                    }
-                    placeholderTextColor="rgba(255,255,255,0.5)"
-                    style={styles.smallInput}
-                    onChangeText={setSeatsAvailable}
-                  />
-                </View>
-
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={date ? new Date(date) : new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(false);
-                      if (selectedDate) {
-                        const formatted = selectedDate
-                          .toISOString()
-                          .split("T")[0];
-                        setDate(formatted);
-                      }
-                    }}
-                  />
-                )}
-
-                <TextInput
-                  placeholder="Description"
-                  placeholderTextColor="rgba(255,255,255,0.5)"
-                  style={styles.descriptionTextInput}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  maxLength={300}
-                  onChangeText={setDescription}
-                />
-              </View>
-            </View>
-          )}
-
-          {selectedMain === "photo" && (
-            <View style={styles.photoContainer}>
-              <TouchableOpacity style={styles.uploadBox}>
-                <Image
-                  source={require("../assets/uploadIcon.png")}
-                  style={styles.uploadIcon}
-                />
-                <Text style={styles.uploadText}>Upload photo</Text>
-                <Text style={styles.uploadHint}>
-                  Tap to select from gallery
-                </Text>
-              </TouchableOpacity>
-
-              <TextInput
-                placeholder="Location"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                style={styles.textInputPhoto}
-              />
-
-              <TextInput
-                placeholder="Tag companions"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                style={styles.textInputPhoto}
-              />
-
-              <TextInput
-                placeholder="Description"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                style={styles.descriptionPhotoInput}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
-          )}
-        </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
-
-      <TouchableOpacity
-        style={styles.postButton}
-        onPress={async () => {
-          if (selectedMain === "photo") {
-            setMessageType("success");
-            setMessage("Photo post UI only for now");
-            setVisible(true);
-            setTimeout(() => setVisible(false), 2000);
-            return;
-          }
-
-          try {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
-            const response = await fetch(`${BASE_URL}/post`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                from,
-                to,
-                date,
-                seatsAvailable,
-                description,
-                type: tripType,
-              }),
-            });
-            const data = await response.json();
-            const messageText = Array.isArray(data.message)
-              ? data.message[0]
-              : data.message;
-            if (response.ok) {
-              setMessageType("success");
-              setMessage(messageText);
-              setVisible(true);
-              setTimeout(() => setVisible(false), 3000);
-              setTimeout(() => navigation.replace("BottomNavigator"), 3000);
-            } else {
-              setMessageType("error");
-              setMessage(messageText);
-              setVisible(true);
-              setTimeout(() => setVisible(false), 2000);
-            }
-          } catch (error) {
-            console.error("❌ Fetch error:", error);
-          }
-        }}
-      >
-        <Text style={styles.buttonText}>Post</Text>
-      </TouchableOpacity>
-
-      {visible && <SuccessMessageBox text={message} type={messageType} />}
-    </View>
-  );
-};
-
-export default PostScreen;
-
-
-
-
-
-
-
-
-
-
-
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  RefreshControl,
-  TextInput,
-  TouchableWithoutFeedback,
-  Keyboard,
-} from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import TravelCard from "../common/TravelCard";
-import styles from "../styles/HomeScreen_styles";
-import * as Location from "expo-location";
-import BASE_URL from "../config/api";
-import { getSocket, onSocketReady } from "../socket";
-
-const HomeScreen = () => {
-  const [trips, setTrips] = useState([]);
-  const [photos, setPhotos] = useState([]);
-  const [filteredTrips, setFilteredTrips] = useState([]);
-  const [search, setSearch] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
-  const [userLat, setUserLat] = useState(null);
-  const [userLng, setUserLng] = useState(null);
-
-  const fetchTrips = async (lat, lng) => {
-    if (!lat || !lng) return;
-    try {
-      const response = await fetch(
-        `${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`
-      );
-      const data = await response.json();
-      setTrips(data);
-      setFilteredTrips(data);
-    } catch (error) {
-      console.error("❌ Fetch error:", error);
     }
-    setRefreshing(false);
-  };
+  }
 
-  const fetchPhotos = async () => {
-    try {
-      const response = await fetch(`${BASE_URL}/post/photos`);
-      const data = await response.json();
-      setPhotos(data);
-    } catch (error) {
-      console.error("❌ Fetch error:", error);
-    }
-  };
+  // --------------------------------
+  // IDENTIFY USER
+  // --------------------------------
+  @SubscribeMessage('chat_identify')
+  identify(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+    const userId = Number(data?.userId);
+    if (!userId) return;
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+    this.clients.set(userId, client.id);
+    return { status: 'ok' };
+  }
 
-      const current_location = await Location.getCurrentPositionAsync({});
-      const lat = current_location.coords.latitude;
-      const lng = current_location.coords.longitude;
+  // --------------------------------
+  // SEND MESSAGE
+  // --------------------------------
+  @SubscribeMessage('sendMessage')
+  async handleSendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() message: any,
+  ) {
+    const { conversationId, sender_id, receiver_id, message_text } = message;
 
-      setUserLat(lat);
-      setUserLng(lng);
-
-      await fetchTrips(lat, lng);
-      await fetchPhotos();
-    })();
-  }, []);
-
-  // 🔥 LISTEN TO SOCKET AND REFRESH LIST WHEN REQUEST IS ACCEPTED
-  useEffect(() => {
-    onSocketReady(() => {
-      const socket = getSocket();
-      if (!socket) return;
-
-      const handler = () => {
-        if (userLat && userLng) fetchTrips(userLat, userLng);
-      };
-
-      socket.on("new_notification", handler);
-
-      return () => socket.off("new_notification", handler);
-    });
-  }, [userLat, userLng]);
-
-  useEffect(() => {
-    if (!search.trim()) {
-      setFilteredTrips(trips);
-      return;
-    }
-
-    const lower = search.toLowerCase();
-    const results = trips.filter((t) =>
-      `${t.origin} ${t.destination}`.toLowerCase().includes(lower)
+    // SAVE MESSAGE
+    await this.db.query(
+      `
+      INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, sent_at, is_read)
+      VALUES (?, ?, ?, ?, NOW(), 0)
+      `,
+      [conversationId, sender_id, receiver_id, message_text],
     );
-    setFilteredTrips(results);
-  }, [search, trips]);
 
-  return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <FlashList
-          data={filteredTrips}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => fetchTrips(userLat, userLng)}
-            />
-          }
-          ListHeaderComponent={
-            <View style={styles.headerContainer}>
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search trips..."
-                placeholderTextColor="#9bb0d4"
-                style={styles.searchBar}
-              />
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TravelCard
-              from={item.origin}
-              to={item.destination}
-              date={item.trip_date}
-              seatsAvailable={item.available_seats}
-              description={item.description}
-              tripType={item.type}
-              firstName={item.first_name}
-              distance={item.distance}
-              creatorId={item.creator_id}
-              tripId={item.id}
-              profilePhoto={item.profile_photo}
-            />
-          )}
-          estimatedItemSize={400}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        />
-      </View>
-    </TouchableWithoutFeedback>
-  );
-};
-
-export default HomeScreen;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import {
-  IsString,
-  IsEmail,
-  IsNotEmpty,
-  MinLength,
-  MaxLength,
-  Matches,
-} from 'class-validator';
-import { Match } from '../decorators/match-password.decorator';
-
-export class CreateRegisterDto {
-  @IsString()
-  @IsNotEmpty({ message: 'First name is required' })
-  first_name: string;
-
-  @IsString()
-  @IsNotEmpty({ message: 'Last name is required' })
-  last_name: string;
-
-  @IsEmail()
-  @IsNotEmpty({ message: 'Please enter a valid email address' })
-  email: string;
-
-  @IsString()
-  @MinLength(8, { message: 'Password must be at least 8 characters long' })
-  @MaxLength(20, { message: 'Password cannot be longer than 20 characters' })
-  @Matches(/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).+$/, {
-    message:
-      'Password must contain at least one uppercase letter, one lowercase letter, and one number.',
-  })
-  password: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @Match('password', { message: 'Passwords do not match.' })
-  confirmedPassword: string;
-}
-
-
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { RegisterService } from './register.service';
-import { CreateRegisterDto } from './dto/create-register.dto';
-import { UpdateRegisterDto } from './dto/update-register.dto';
-
-@Controller('register')
-export class RegisterController {
-  constructor(private readonly registerService: RegisterService) {}
-
-  @Post()
-  create(@Body() createRegisterDto: CreateRegisterDto) {
-    return this.registerService.create(createRegisterDto);
+    const payload = {
+      conversationId,
+      sender_id,
+      receiver_id,
+      message_text,
+      sent_at: new Date(),
+    };
+
+    // EMIT MESSAGE TO RECEIVER + SENDER
+    const receiverSocket = this.clients.get(receiver_id);
+    if (receiverSocket) {
+      this.server.to(receiverSocket).emit('newMessage', payload);
+    }
+    client.emit('newMessage', payload);
+
+    // -------------------------------------------
+    // FETCH CONVERSATION PREVIEW FOR SENDER
+    // -------------------------------------------
+    const [senderRows]: any = await this.db.query(
+      `
+      SELECT 
+        c.id AS conversationId,
+        u.id AS otherUserId,
+        CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
+        u.profile_photo AS otherUserPhoto,
+        m.message_text AS lastMessageText,
+        m.sent_at AS lastMessageTime,
+        (
+          SELECT COUNT(*) 
+          FROM messages 
+          WHERE conversation_id = c.id 
+          AND receiver_id = ?
+          AND is_read = 0
+        ) AS unreadCount
+      FROM conversations c
+      JOIN conversation_participants cp_me
+        ON cp_me.conversation_id = c.id AND cp_me.user_id = ?
+      JOIN conversation_participants cp_other
+        ON cp_other.conversation_id = c.id AND cp_other.user_id != cp_me.user_id
+      JOIN users u 
+        ON u.id = cp_other.user_id
+      LEFT JOIN messages m 
+        ON m.id = (
+          SELECT id FROM messages 
+          WHERE conversation_id = c.id 
+          ORDER BY sent_at DESC 
+          LIMIT 1
+        )
+      WHERE c.id = ?
+      LIMIT 1
+      `,
+      [sender_id, sender_id, conversationId],
+    );
+
+    const senderPreview = senderRows[0];
+
+    // -------------------------------------------
+    // FETCH CONVERSATION PREVIEW FOR RECEIVER
+    // -------------------------------------------
+    const [receiverRows]: any = await this.db.query(
+      `
+      SELECT 
+        c.id AS conversationId,
+        u.id AS otherUserId,
+        CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
+        u.profile_photo AS otherUserPhoto,
+        m.message_text AS lastMessageText,
+        m.sent_at AS lastMessageTime,
+        (
+          SELECT COUNT(*) 
+          FROM messages 
+          WHERE conversation_id = c.id 
+          AND receiver_id = ?
+          AND is_read = 0
+        ) AS unreadCount
+      FROM conversations c
+      JOIN conversation_participants cp_me
+        ON cp_me.conversation_id = c.id AND cp_me.user_id = ?
+      JOIN conversation_participants cp_other
+        ON cp_other.conversation_id = c.id AND cp_other.user_id != cp_me.user_id
+      JOIN users u 
+        ON u.id = cp_other.user_id
+      LEFT JOIN messages m 
+        ON m.id = (
+          SELECT id FROM messages 
+          WHERE conversation_id = c.id 
+          ORDER BY sent_at DESC 
+          LIMIT 1
+        )
+      WHERE c.id = ?
+      LIMIT 1
+      `,
+      [receiver_id, receiver_id, conversationId],
+    );
+
+    const receiverPreview = receiverRows[0];
+
+    // EMIT UPDATED PREVIEW TO BOTH USERS
+    const senderSocket = this.clients.get(sender_id);
+    if (senderSocket && senderPreview) {
+      this.server.to(senderSocket).emit('conversationUpdate', senderPreview);
+    }
+
+    if (receiverSocket && receiverPreview) {
+      this.server
+        .to(receiverSocket)
+        .emit('conversationUpdate', receiverPreview);
+    }
+
+    return { delivered: !!receiverSocket };
   }
 
-  @Get()
-  findAll() {
-    return this.registerService.findAll();
-  }
+  // --------------------------------
+  // MARK MESSAGES AS READ
+  // --------------------------------
+  @SubscribeMessage('mark_read')
+  async markMessagesRead(@MessageBody() data: any) {
+    const { conversationId, userId } = data;
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.registerService.findOne(+id);
-  }
+    // 1) Update DB
+    await this.db.query(
+      `
+      UPDATE messages
+      SET is_read = 1
+      WHERE conversation_id = ?
+      AND receiver_id = ?
+      `,
+      [conversationId, userId],
+    );
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateRegisterDto: UpdateRegisterDto) {
-    return this.registerService.update(+id, updateRegisterDto);
-  }
+    // 2) Recompute preview for THIS user (so unreadCount becomes 0)
+    const [rows]: any = await this.db.query(
+      `
+      SELECT 
+        c.id AS conversationId,
+        u.id AS otherUserId,
+        CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
+        u.profile_photo AS otherUserPhoto,
+        m.message_text AS lastMessageText,
+        m.sent_at AS lastMessageTime,
+        (
+          SELECT COUNT(*) FROM messages 
+          WHERE conversation_id = c.id
+          AND receiver_id = ?
+          AND is_read = 0
+        ) AS unreadCount
+      FROM conversations c
+      JOIN conversation_participants cp_me
+        ON cp_me.conversation_id = c.id AND cp_me.user_id = ?
+      JOIN conversation_participants cp_other
+        ON cp_other.conversation_id = c.id AND cp_other.user_id != cp_me.user_id
+      JOIN users u
+        ON u.id = cp_other.user_id
+      LEFT JOIN messages m
+        ON m.id = (
+          SELECT id FROM messages
+          WHERE conversation_id = c.id
+          ORDER BY sent_at DESC
+          LIMIT 1
+        )
+      WHERE c.id = ?
+      LIMIT 1
+      `,
+      [userId, userId, conversationId],
+    );
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.registerService.remove(+id);
+    const preview = rows[0];
+    const socketId = this.clients.get(userId);
+
+    // 3) Push fresh preview to that user so UI loses highlight
+    if (socketId && preview) {
+      this.server.to(socketId).emit('conversationUpdate', preview);
+    }
+
+    return { ok: true };
   }
 }
+
+
+
 
 
 import { Module } from '@nestjs/common';
-import { RegisterService } from './register.service';
-import { RegisterController } from './register.controller';
-import { DatabaseModule } from '../database/database.module';
+import { ChatGateway } from './chat.gateway';
+import { DatabaseModule } from 'src/database/database.module';
 
 @Module({
-  imports: [DatabaseModule],
-  controllers: [RegisterController],
-  providers: [RegisterService],
+  imports: [DatabaseModule], // 🔥 REQUIRED
+  providers: [ChatGateway],
 })
-export class RegisterModule {}
+export class ChatModule {}
 
 
-import { Inject, Injectable } from '@nestjs/common';
-import { CreateRegisterDto } from './dto/create-register.dto';
-import { UpdateRegisterDto } from './dto/update-register.dto';
-import type { Pool } from 'mysql2/promise';
-import * as bcrypt from 'bcrypt';
-import { generateToken } from 'src/utils/jwt.utils';
 
-@Injectable()
-export class RegisterService {
-  constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
-
-  async create(createRegisterDto: CreateRegisterDto) {
-    const { first_name, last_name, email, password } = createRegisterDto;
-    const saltRound = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRound);
-
-    try {
-      const [result]: any = await this.db.query(
-        'INSERT INTO users (first_name, last_name, email, password_hash) VALUES (?, ?, ?, ?)',
-        [first_name, last_name, email, hashedPassword],
-      );
-
-      const token = generateToken({
-        id: result.insertId,
-        email,
-        first_name,
-        last_name,
-      });
-
-      return {
-        message: 'User registered successfully.',
-        token,
-        user: {
-          id: result.insertId,
-          email,
-          first_name,
-          last_name,
-        },
-      };
-    } catch (error) {
-      console.error('❌ Database Error:', error);
-      throw error;
-    }
-  }
-
-  findAll() {
-    return `This action returns all register`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} register`;
-  }
-
-  update(id: number, updateRegisterDto: UpdateRegisterDto) {
-    return `This action updates a #${id} register`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} register`;
-  }
-}
-
-
-import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class CreateCompleteProfileDto {
-  @IsOptional()
-  @IsString()
-  bio?: string;
-
-  @IsOptional()
-  @IsString()
-  city?: string;
-
-  @IsOptional()
-  @IsString()
-  interests?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(120)
-  age?: number;
-
-  @IsOptional()
-  @IsString()
-  profile_photo?: string;
-
-  @IsOptional()
-  @IsString()
-  cover_photo?: string;
-}
-
-import { Controller, Post, Body, Req } from '@nestjs/common';
-import { CompleteProfileService } from './complete-profile.service';
-import { CreateCompleteProfileDto } from './dto/create-complete-profile.dto';
-
-@Controller('profile')
-export class CompleteProfileController {
-  constructor(
-    private readonly completeProfileService: CompleteProfileService,
-  ) {}
-
-  @Post('setup')
-  async setup(@Req() req, @Body() dto: CreateCompleteProfileDto) {
-    // You pass the token manually, so extract userId from request header manually:
-    const token = req.headers.authorization?.split(' ')[1];
-
-    // decode token (VERY light decoding, same as your login/register do)
-    const payload = JSON.parse(
-      Buffer.from(token.split('.')[1], 'base64').toString(),
-    );
-    const userId = payload.id;
-
-    return this.completeProfileService.completeProfile(userId, dto);
-  }
-}
-
-import { Module } from '@nestjs/common';
-import { CompleteProfileController } from './complete-profile.controller';
-import { CompleteProfileService } from './complete-profile.service';
-import { DatabaseModule } from '../database/database.module';
-
-@Module({
-  imports: [DatabaseModule],
-  controllers: [CompleteProfileController],
-  providers: [CompleteProfileService],
-})
-export class CompleteProfileModule {}
-
-import { Inject, Injectable } from '@nestjs/common';
-import { CreateCompleteProfileDto } from './dto/create-complete-profile.dto';
-import type { Pool } from 'mysql2/promise';
-
-@Injectable()
-export class CompleteProfileService {
-  constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
-
-  async completeProfile(userId: number, dto: CreateCompleteProfileDto) {
-    const { bio, city, interests, age, profile_photo, cover_photo } = dto;
-
-    try {
-      await this.db.query(
-        `UPDATE users
-         SET bio = ?, city = ?, interests = ?, age = ?, profile_photo = ?, cover_photo = ?
-         WHERE id = ?`,
-        [bio, city, interests, age, profile_photo, cover_photo, userId],
-      );
-
-      return { message: 'Profile completed successfully.' };
-    } catch (error) {
-      console.error('❌ Database Error (completeProfile):', error);
-      throw error;
-    }
-  }
-}
-
-
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
-
-export class CreatePhotoDto {
-  @IsNotEmpty()
-  @IsString()
-  photo_url: string;
-
-  @IsOptional()
-  @IsString()
-  location?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-}
-
-import {
-  IsString,
-  IsNotEmpty,
-  IsInt,
-  IsDateString,
-  IsEnum,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class CreatePostDto {
-  @IsNotEmpty({ message: "Can't be empty" })
-  @IsString()
-  from: string;
-
-  @IsNotEmpty({ message: "Can't be empty" })
-  @IsString()
-  to: string;
-
-  @IsNotEmpty({ message: 'Please enter a valid date' })
-  @IsDateString()
-  date: string;
-
-  @IsNotEmpty()
-  @Type(() => Number)
-  @IsInt({ message: 'Seats must be a number' })
-  seatsAvailable: number;
-
-  @IsString()
-  description: string;
-
-  @IsEnum(['Offering', 'Searching'], {
-    message: 'Type must be Offering or Searching',
-  })
-  type: 'Offering' | 'Searching';
-}
-
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Req,
-  Query,
-} from '@nestjs/common';
-import { PostService } from './post.service';
-import { CreatePostDto } from './dto/create-post.dto';
-import { UpdatePostDto } from './dto/update-post.dto';
+import { Controller, Post, Get, Req, Body } from '@nestjs/common';
+import { ConversationsService } from './conversations.service';
 import { verifyToken } from 'src/utils/jwt.utils';
-import { CreatePhotoDto } from './dto/create-photo.dto';
 
-@Controller('post')
-export class PostController {
-  constructor(private readonly postService: PostService) {}
+@Controller('conversations')
+export class ConversationsController {
+  constructor(private readonly conversationsService: ConversationsService) {}
 
-  @Post()
-  create(@Req() req, @Body() createPostDto: CreatePostDto) {
+  @Post('start')
+  async startConversation(@Req() req, @Body() body) {
     const userId = verifyToken(req);
-    return this.postService.create(createPostDto, userId);
+    const otherUserId = Number(body.otherUserId);
+    return this.conversationsService.startConversation(userId, otherUserId);
   }
 
   @Get()
-  findAll() {
-    return this.postService.findAll();
-  }
-
-  @Get('nearby')
-  findNearby(@Query('lat') lat: number, @Query('lng') lng: number) {
-    return this.postService.findNearby(lat, lng);
-  }
-
-  @Get('user/:id')
-  findByUser(@Param('id') id: number) {
-    return this.postService.findByUser(id);
-  }
-
-  @Get('my-trips')
-  findMyTrips(@Req() req) {
+  async getUserConversations(@Req() req) {
     const userId = verifyToken(req);
-    return this.postService.findMyTrips(userId);
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.postService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updatePostDto: UpdatePostDto) {
-    return this.postService.update(+id, updatePostDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.postService.remove(+id);
-  }
-
-  @Post('photo')
-  createPhoto(@Req() req, @Body() createPhotoDto: CreatePhotoDto) {
-    const userId = verifyToken(req);
-    return this.postService.createPhoto(createPhotoDto, userId);
-  }
-
-  @Get('photos')
-  getAllPhotos() {
-    return this.postService.getAllPhotos();
+    return this.conversationsService.getUserConversations(userId);
   }
 }
+
 
 import { Module } from '@nestjs/common';
-import { PostService } from './post.service';
-import { PostController } from './post.controller';
-import { DatabaseModule } from '../database/database.module';
-
+import { ConversationsService } from './conversations.service';
+import { ConversationsController } from './conversations.controller';
+import { DatabaseModule } from 'src/database/database.module';
 @Module({
   imports: [DatabaseModule],
-  controllers: [PostController],
-  providers: [PostService],
+  controllers: [ConversationsController],
+  providers: [ConversationsService],
 })
-export class PostModule {}
+export class ConversationsModule {}
 
-import {
-  Injectable,
-  Inject,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
-import { CreatePostDto } from './dto/create-post.dto';
-import { UpdatePostDto } from './dto/update-post.dto';
+
+import { Injectable, Inject } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
-import { getCoordinates } from 'src/utils/geocoding.utils';
-import { CreatePhotoDto } from './dto/create-photo.dto';
 
 @Injectable()
-export class PostService {
+export class ConversationsService {
   constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
 
-  async create(createPostDto: CreatePostDto, userId: number) {
-    const { from, to, date, seatsAvailable, description, type } = createPostDto;
+  // START OR FETCH EXISTING CONVERSATION
+  async startConversation(userId: number, otherUserId: number) {
+    const [existing]: any = await this.db.query(
+      `
+      SELECT c.id
+      FROM conversations c
+      JOIN conversation_participants cp1 ON cp1.conversation_id = c.id
+      JOIN conversation_participants cp2 ON cp2.conversation_id = c.id
+      WHERE cp1.user_id = ? AND cp2.user_id = ?
+      LIMIT 1
+      `,
+      [userId, otherUserId],
+    );
 
-    const from_location = await getCoordinates(from);
-    const to_location = await getCoordinates(to);
-
-    const from_lat = from_location.lat;
-    const from_lng = from_location.lng;
-    const to_lat = to_location.lat;
-    const to_lng = to_location.lng;
-
-    try {
-      const [rows]: any = await this.db.query(
-        'SELECT COUNT(*) AS count FROM trips WHERE creator_id = ?',
-        [userId],
-      );
-      const userPostCount = rows[0].count;
-
-      if (userPostCount >= 3) {
-        throw new BadRequestException(
-          'You have reached the maximum number of posts',
-        );
-      }
-
-      await this.db.query(
-        `INSERT INTO trips (
-          creator_id, origin, destination, trip_date,
-          available_seats, description, type,
-          origin_lat, origin_lng, destination_lat, destination_lng
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          userId,
-          from,
-          to,
-          date,
-          seatsAvailable,
-          description,
-          type,
-          from_lat,
-          from_lng,
-          to_lat,
-          to_lng,
-        ],
-      );
-
-      return { message: 'Trip registered successfully' };
-    } catch (error) {
-      console.error('❌ Database Error (create):', error);
-      throw error;
+    if (existing.length > 0) {
+      return { conversationId: existing[0].id };
     }
+
+    const [result]: any = await this.db.query(
+      `INSERT INTO conversations () VALUES ()`,
+    );
+
+    const conversationId = result.insertId;
+
+    await this.db.query(
+      `INSERT INTO conversation_participants (conversation_id, user_id)
+       VALUES (?, ?), (?, ?)`,
+      [conversationId, userId, conversationId, otherUserId],
+    );
+
+    return { conversationId };
   }
 
-  async findAll() {
-    try {
-      const [rows] = await this.db.query(
-        `SELECT trips.*, users.first_name, users.profile_photo
-         FROM trips
-         JOIN users ON trips.creator_id = users.id
-         ORDER BY trip_date DESC`,
-      );
-      return rows;
-    } catch (error) {
-      console.error('❌ Database Error (findAll):', error);
-      throw error;
-    }
-  }
+  // GET USER CONVERSATIONS
+  async getUserConversations(userId: number) {
+    const [rows]: any = await this.db.query(
+      `
+      SELECT 
+        c.id AS conversationId,
+        u.id AS otherUserId,
+        CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
+        u.profile_photo AS otherUserPhoto,
+        m.message_text AS lastMessageText,
+        m.sent_at AS lastMessageTime,
+        (
+          SELECT COUNT(*) FROM messages 
+          WHERE conversation_id = c.id
+          AND receiver_id = ?
+          AND is_read = 0
+        ) AS unreadCount
+      FROM conversations c
+      JOIN conversation_participants cp ON cp.conversation_id = c.id
+      JOIN conversation_participants cp2 ON cp2.conversation_id = c.id AND cp2.user_id != cp.user_id
+      JOIN users u ON u.id = cp2.user_id
+      LEFT JOIN messages m ON m.id = (
+        SELECT id FROM messages 
+        WHERE conversation_id = c.id 
+        ORDER BY sent_at DESC LIMIT 1
+      )
+      WHERE cp.user_id = ?
+      ORDER BY m.sent_at DESC
+      `,
+      [userId, userId],
+    );
 
-  async findNearby(userLat: number, userLng: number) {
-    try {
-      const [rows] = await this.db.query(
-        `SELECT 
-          trips.*, 
-          users.first_name,
-          users.profile_photo,
-          (6371 * acos(
-            cos(radians(?)) *
-            cos(radians(origin_lat)) *
-            cos(radians(origin_lng) - radians(?)) +
-            sin(radians(?)) *
-            sin(radians(origin_lat))
-          )) AS distance
-        FROM trips
-        JOIN users ON trips.creator_id = users.id
-        WHERE origin_lat IS NOT NULL AND destination_lat IS NOT NULL
-        ORDER BY distance ASC`,
-        [userLat, userLng, userLat],
-      );
-      return rows;
-    } catch (error) {
-      console.error('❌ Database Error (findNearby):', error);
-      throw error;
-    }
-  }
-
-  async findByUser(userId: number) {
-    try {
-      const [rows] = await this.db.query(
-        `SELECT trips.*, users.first_name, users.profile_photo
-         FROM trips
-         JOIN users ON trips.creator_id = users.id
-         WHERE creator_id = ?
-         ORDER BY trip_date DESC`,
-        [userId],
-      );
-      return rows;
-    } catch (error) {
-      console.error('❌ Database Error (findByUser):', error);
-      throw error;
-    }
-  }
-
-  async findMyTrips(userId: number) {
-    try {
-      const [rows] = await this.db.query(
-        `SELECT trips.*, users.first_name, users.profile_photo
-         FROM trips
-         JOIN users ON trips.creator_id = users.id
-         WHERE creator_id = ?
-         ORDER BY trip_date DESC`,
-        [userId],
-      );
-      return rows;
-    } catch (error) {
-      console.error('❌ Database Error (findMyTrips):', error);
-      throw error;
-    }
-  }
-
-  async findOne(id: number) {
-    try {
-      const [rows]: any = await this.db.query(
-        `SELECT 
-          trips.*, 
-          users.first_name, 
-          users.profile_photo
-        FROM trips
-        JOIN users ON trips.creator_id = users.id
-        WHERE trips.id = ?
-        LIMIT 1`,
-        [id],
-      );
-
-      if (!rows || rows.length === 0) {
-        throw new NotFoundException('Trip not found');
-      }
-
-      const r = rows[0];
-
-      return {
-        id: r.id,
-        from: r.origin,
-        to: r.destination,
-        date: r.trip_date,
-        seatsAvailable: r.available_seats,
-        description: r.description,
-        tripType: r.type,
-        creatorId: r.creator_id,
-        firstName: r.first_name,
-        profilePhoto: r.profile_photo,
-        distance: null,
-      };
-    } catch (error) {
-      console.error('❌ Database Error (findOne):', error);
-      throw error;
-    }
-  }
-
-  update(id: number, updatePostDto: UpdatePostDto) {
-    return `This action updates a #${id} post`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} post`;
-  }
-
-  async createPhoto(createPhotoDto: CreatePhotoDto, userId: number) {
-    const { photo_url, location, description } = createPhotoDto;
-    try {
-      await this.db.query(
-        `INSERT INTO photos (user_id, photo_url, location, description)
-        VALUES (?, ?, ?, ?)`,
-        [userId, photo_url, location, description],
-      );
-      return { message: 'Photo post created successfully' };
-    } catch (error) {
-      console.error('❌ Database Error (createPhoto):', error);
-      throw error;
-    }
-  }
-
-  async getAllPhotos() {
-    try {
-      const [rows]: any = await this.db.query(
-        `SELECT 
-         photos.id,
-         photos.photo_url,
-         photos.location,
-         photos.description,
-         photos.created_at,
-         users.first_name,
-         users.profile_photo
-       FROM photos
-       JOIN users ON photos.user_id = users.id
-       ORDER BY photos.created_at DESC`,
-      );
-
-      return rows;
-    } catch (error) {
-      console.error('❌ Database Error (getAllPhotos):', error);
-      throw error;
-    }
+    return rows;
   }
 }
+
 
 import { IsNotEmpty, IsNumber } from 'class-validator';
 
@@ -1254,6 +389,7 @@ export class CreateInterestRequestDto {
   @IsNumber()
   ownerId: number;
 }
+
 
 import {
   Controller,
@@ -1313,6 +449,7 @@ export class InterestRequestsController {
   }
 }
 
+
 import { Module } from '@nestjs/common';
 import { InterestRequestsService } from './interest_requests.service';
 import { InterestRequestsController } from './interest_requests.controller';
@@ -1325,6 +462,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
   providers: [InterestRequestsService],
 })
 export class InterestRequestsModule {}
+
 
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
@@ -1440,7 +578,84 @@ export class InterestRequestsService {
   }
 }
 
-import { Controller, Get, Req } from '@nestjs/common';
+
+import { Controller, Post, Body, Req, Get, Param } from '@nestjs/common';
+import { MessagesService } from './messages.service';
+import { verifyToken } from 'src/utils/jwt.utils';
+
+@Controller('messages')
+export class MessagesController {
+  constructor(private readonly messagesService: MessagesService) {}
+
+  @Post()
+  async insertMessage(@Req() req, @Body() body: any) {
+    const userId = verifyToken(req);
+    return this.messagesService.insertMessage(userId, body);
+  }
+
+  @Get(':conversationId')
+  async getMessages(
+    @Req() req,
+    @Param('conversationId') conversationId: string,
+  ) {
+    const userId = verifyToken(req);
+    return this.messagesService.getMessages(userId, Number(conversationId));
+  }
+}
+
+
+import { Module } from '@nestjs/common';
+import { MessagesService } from './messages.service';
+import { MessagesController } from './messages.controller';
+import { DatabaseModule } from 'src/database/database.module';
+
+@Module({
+  imports: [DatabaseModule],
+  controllers: [MessagesController],
+  providers: [MessagesService],
+})
+export class MessagesModule {}
+
+
+import { Injectable, Inject } from '@nestjs/common';
+import type { Pool } from 'mysql2/promise';
+
+@Injectable()
+export class MessagesService {
+  constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
+
+  async insertMessage(userId: number, body: any) {
+    const { conversationId, receiverId, message_text } = body;
+
+    await this.db.query(
+      `
+      INSERT INTO messages(conversation_id, sender_id, receiver_id, message_text, sent_at)
+      VALUES (?, ?, ?, ?, NOW())
+      `,
+      [conversationId, userId, receiverId, message_text],
+    );
+
+    return { success: true };
+  }
+
+  async getMessages(userId: number, conversationId: number) {
+    const [rows]: any = await this.db.query(
+      `
+      SELECT *
+      FROM messages
+      WHERE conversation_id = ?
+      ORDER BY sent_at ASC
+      `,
+      [conversationId],
+    );
+
+    return rows;
+  }
+}
+
+
+
+import { Controller, Get, Patch, Req } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { verifyToken } from 'src/utils/jwt.utils';
 
@@ -1448,12 +663,27 @@ import { verifyToken } from 'src/utils/jwt.utils';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  // unread only (badge)
   @Get()
+  findUnread(@Req() req) {
+    const userId = verifyToken(req);
+    return this.notificationsService.findUnread(userId);
+  }
+
+  // all notifications (screen)
+  @Get('all')
   findAll(@Req() req) {
     const userId = verifyToken(req);
     return this.notificationsService.findAll(userId);
   }
+
+  @Patch('mark-read')
+  markAllRead(@Req() req) {
+    const userId = verifyToken(req);
+    return this.notificationsService.markAllRead(userId);
+  }
 }
+
 
 import {
   WebSocketGateway,
@@ -1486,7 +716,7 @@ export class NotificationsGateway
 
   handleConnection(client: Socket) {
     try {
-      // Try to extract token from handshake headers first (if provided)
+      // Try to extract token directly from handshake
       let tokenUserId: number | null = null;
       try {
         tokenUserId = verifySocketToken(client);
@@ -1513,7 +743,6 @@ export class NotificationsGateway
             this.logger.log(
               `Identify received: mapped user ${uid} -> socket ${client.id}`,
             );
-            // Ack back so client knows mapping succeeded
             client.emit('identify_ack', { success: true, userId: uid });
           } else {
             this.logger.debug(
@@ -1612,8 +841,18 @@ export class NotificationsGateway
       );
     }
   }
+
+  // ------------------------------------------------------
+  // ⭐ NEW: BROADCAST TRIP DELETION TO ALL USERS
+  // ------------------------------------------------------
+  sendTripDeleted(tripId: number) {
+    this.logger.log(`Broadcasting trip_deleted tripId=${tripId}`);
+    this.server.emit('trip_deleted', { tripId });
+  }
 }
 
+
+// src/notifications/notifications.module.ts
 import { Module } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
@@ -1624,9 +863,13 @@ import { DatabaseModule } from '../database/database.module';
   imports: [DatabaseModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsGateway],
-  exports: [NotificationsService],
+
+  // ⭐ FIX: Export the gateway so other modules (PostModule) can use it
+  exports: [NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}
+
+
 
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
@@ -1657,8 +900,8 @@ export class NotificationsService {
     const [res]: any = await this.db.query(
       `
         INSERT INTO notifications 
-        (receiver_id, sender_id, trip_id, type, message, interest_request_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (receiver_id, sender_id, trip_id, type, message, interest_request_id, is_read)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
       `,
       [receiverId, senderId, tripId, type, message, interestRequestId],
     );
@@ -1683,24 +926,43 @@ export class NotificationsService {
         notif.created_at = notif.created_at.toISOString();
       }
 
-      // Send via gateway to all sockets for receiver
       try {
         this.gateway.sendNotification(receiverId, notif);
-        this.logger.log(
-          `Notification emitted to user ${receiverId} (id=${insertedId})`,
-        );
       } catch (e) {
-        this.logger.error('Failed to emit notification via gateway', e as any);
+        this.logger.error('Emit failed', e as any);
       }
-    } else {
-      this.logger.warn(
-        `Inserted notification id ${insertedId} not found in DB SELECT`,
-      );
     }
 
     return notif;
   }
 
+  // unread (badge)
+  async findUnread(receiverId: number) {
+    const [rows]: any = await this.db.query(
+      `
+        SELECT 
+          notifications.*,
+          users.first_name AS sender_name,
+          users.profile_photo AS sender_photo
+        FROM notifications
+        JOIN users ON notifications.sender_id = users.id
+        WHERE notifications.receiver_id = ?
+        AND notifications.is_read = 0
+        ORDER BY notifications.created_at DESC
+      `,
+      [receiverId],
+    );
+
+    return rows.map((r) => ({
+      ...r,
+      created_at:
+        r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : r.created_at,
+    }));
+  }
+
+  // full list (screen)
   async findAll(receiverId: number) {
     const [rows]: any = await this.db.query(
       `
@@ -1716,24 +978,547 @@ export class NotificationsService {
       [receiverId],
     );
 
-    (rows || []).forEach((r) => {
-      if (r.created_at instanceof Date)
-        r.created_at = r.created_at.toISOString();
-    });
+    return rows.map((r) => ({
+      ...r,
+      created_at:
+        r.created_at instanceof Date
+          ? r.created_at.toISOString()
+          : r.created_at,
+    }));
+  }
 
-    return rows;
+  async markAllRead(receiverId: number) {
+    await this.db.query(
+      `
+        UPDATE notifications
+        SET is_read = 1
+        WHERE receiver_id = ?
+      `,
+      [receiverId],
+    );
+
+    return { success: true };
   }
 }
 
+
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+
+export class CreatePhotoDto {
+  @IsNotEmpty()
+  @IsString()
+  photo_url: string;
+
+  @IsOptional()
+  @IsString()
+  location: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+
+
+import {
+  IsString,
+  IsNotEmpty,
+  IsInt,
+  IsDateString,
+  IsEnum,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CreatePostDto {
+  @IsNotEmpty({ message: "Can't be empty" })
+  @IsString()
+  from: string;
+
+  @IsNotEmpty({ message: "Can't be empty" })
+  @IsString()
+  to: string;
+
+  @IsNotEmpty({ message: 'Please enter a valid date' })
+  @IsDateString()
+  date: string;
+
+  @IsNotEmpty()
+  @Type(() => Number)
+  @IsInt({ message: 'Seats must be a number' })
+  seatsAvailable: number;
+
+  @IsString()
+  description: string;
+
+  @IsEnum(['Offering', 'Searching'], {
+    message: 'Type must be Offering or Searching',
+  })
+  type: 'Offering' | 'Searching';
+}
+
+
+// src/post/post.controller.ts
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Req,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
+import { PostService } from './post.service';
+import { CreatePostDto } from './dto/create-post.dto';
+import { verifyToken } from 'src/utils/jwt.utils';
+import { CreatePhotoDto } from './dto/create-photo.dto';
+
+@Controller('post')
+export class PostController {
+  constructor(private readonly postService: PostService) {}
+
+  @Post()
+  create(@Req() req, @Body() createPostDto: CreatePostDto) {
+    const userId = verifyToken(req);
+    return this.postService.create(createPostDto, userId);
+  }
+
+  @Get()
+  findAll() {
+    return this.postService.findAll();
+  }
+
+  // ---------- STATIC ROUTES (MUST BE BEFORE :id) ----------
+  @Get('nearby')
+  findNearby(@Query('lat') lat?: string, @Query('lng') lng?: string) {
+    const parsedLat = lat ? Number(lat) : undefined;
+    const parsedLng = lng ? Number(lng) : undefined;
+
+    if (lat && Number.isNaN(parsedLat)) {
+      throw new BadRequestException('lat must be a valid number');
+    }
+    if (lng && Number.isNaN(parsedLng)) {
+      throw new BadRequestException('lng must be a valid number');
+    }
+
+    return this.postService.findNearby(parsedLat ?? 0, parsedLng ?? 0);
+  }
+
+  @Get('user/:id')
+  findByUser(@Param('id') id: string) {
+    return this.postService.findByUser(Number(id));
+  }
+
+  @Get('my-trips')
+  findMyTrips(@Req() req) {
+    return this.postService.findMyTrips(verifyToken(req));
+  }
+
+  // ---------- PHOTOS ----------
+  @Post('photo')
+  createPhoto(@Req() req, @Body() dto: CreatePhotoDto) {
+    return this.postService.createPhoto(dto, verifyToken(req));
+  }
+
+  @Get('photos')
+  getAllPhotos(@Query('lat') lat?: string, @Query('lng') lng?: string) {
+    return this.postService.getAllPhotos(
+      lat ? Number(lat) : undefined,
+      lng ? Number(lng) : undefined,
+    );
+  }
+
+  @Get('photos/:userId')
+  getPhotosByUser(@Param('userId') userId: string) {
+    return this.postService.getPhotosByUser(Number(userId));
+  }
+
+  // ---------- DELETE (must be BEFORE :id but AFTER static routes) ----------
+  @Delete(':id')
+  delete(@Req() req, @Param('id') id: string) {
+    const userId = verifyToken(req);
+    const parsed = Number(id);
+    if (Number.isNaN(parsed)) throw new BadRequestException('Invalid trip id');
+
+    return this.postService.delete(parsed, userId); // ✅ CORRECT
+  }
+
+  // ---------- THIS MUST BE LAST ----------
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    const parsed = Number(id);
+    if (Number.isNaN(parsed)) throw new BadRequestException('Invalid trip id');
+    return this.postService.findOne(parsed);
+  }
+}
+
+
+import { Module } from '@nestjs/common';
+import { PostService } from './post.service';
+import { PostController } from './post.controller';
+import { DatabaseModule } from '../database/database.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+
+@Module({
+  imports: [DatabaseModule, NotificationsModule],
+  controllers: [PostController],
+  providers: [PostService, NotificationsGateway],
+})
+export class PostModule {}
+
+
+
+import {
+  Injectable,
+  Inject,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import type { Pool } from 'mysql2/promise';
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
+import { getCoordinates } from 'src/utils/geocoding.utils';
+import { CreatePhotoDto } from './dto/create-photo.dto';
+
+// ⭐ Add this import so we can broadcast trip deletion
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
+
+@Injectable()
+export class PostService {
+  constructor(
+    @Inject('DATABASE_CONNECTION') private readonly db: Pool,
+    private readonly notificationsGateway: NotificationsGateway, // ⭐ inject gateway
+  ) {}
+
+  async create(createPostDto: CreatePostDto, userId: number) {
+    const { from, to, date, seatsAvailable, description, type } = createPostDto;
+
+    const from_location = await getCoordinates(from);
+    const to_location = await getCoordinates(to);
+
+    const from_lat = from_location.lat;
+    const from_lng = from_location.lng;
+    const to_lat = to_location.lat;
+    const to_lng = to_location.lng;
+
+    try {
+      const [rows]: any = await this.db.query(
+        'SELECT COUNT(*) AS count FROM trips WHERE creator_id = ?',
+        [userId],
+      );
+      const userPostCount = rows[0].count;
+
+      if (userPostCount >= 3) {
+        throw new BadRequestException(
+          'You have reached the maximum number of posts',
+        );
+      }
+
+      await this.db.query(
+        `INSERT INTO trips (
+          creator_id, origin, destination, trip_date,
+          available_seats, description, type,
+          origin_lat, origin_lng, destination_lat, destination_lng
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          userId,
+          from,
+          to,
+          date,
+          seatsAvailable,
+          description,
+          type,
+          from_lat,
+          from_lng,
+          to_lat,
+          to_lng,
+        ],
+      );
+
+      return { message: 'Trip registered successfully' };
+    } catch (error) {
+      console.error('❌ Database Error (create):', error);
+      throw error;
+    }
+  }
+
+  async findAll() {
+    try {
+      const [rows] = await this.db.query(
+        `SELECT trips.*, users.first_name, users.profile_photo
+         FROM trips
+         JOIN users ON trips.creator_id = users.id
+         ORDER BY trip_date DESC`,
+      );
+      return rows;
+    } catch (error) {
+      console.error('❌ Database Error (findAll):', error);
+      throw error;
+    }
+  }
+
+  async findNearby(userLat: number, userLng: number) {
+    try {
+      const [rows] = await this.db.query(
+        `SELECT 
+          trips.*, 
+          users.first_name,
+          users.profile_photo,
+          (6371 * acos(
+            cos(radians(?)) *
+            cos(radians(origin_lat)) *
+            cos(radians(origin_lng) - radians(?)) +
+            sin(radians(?)) *
+            sin(radians(origin_lat))
+          )) AS distance
+        FROM trips
+        JOIN users ON trips.creator_id = users.id
+        ORDER BY distance ASC`,
+        [userLat, userLng, userLat],
+      );
+      return rows;
+    } catch (error) {
+      console.error('❌ Database Error (findNearby):', error);
+      throw error;
+    }
+  }
+
+  async findByUser(userId: number) {
+    try {
+      const [rows] = await this.db.query(
+        `SELECT trips.*, users.first_name, users.profile_photo
+         FROM trips
+         JOIN users ON trips.creator_id = users.id
+         WHERE creator_id = ?
+         ORDER BY trip_date DESC`,
+        [userId],
+      );
+      return rows;
+    } catch (error) {
+      console.error('❌ Database Error (findByUser):', error);
+      throw error;
+    }
+  }
+
+  async findMyTrips(userId: number) {
+    try {
+      const [rows] = await this.db.query(
+        `SELECT trips.*, users.first_name, users.profile_photo
+         FROM trips
+         JOIN users ON trips.creator_id = users.id
+         WHERE creator_id = ?
+         ORDER BY trip_date DESC`,
+        [userId],
+      );
+      return rows;
+    } catch (error) {
+      console.error('❌ Database Error (findMyTrips):', error);
+      throw error;
+    }
+  }
+
+  async findOne(id: number) {
+    try {
+      const [rows]: any = await this.db.query(
+        `SELECT 
+          trips.*, 
+          users.first_name, 
+          users.profile_photo
+        FROM trips
+        JOIN users ON trips.creator_id = users.id
+        WHERE trips.id = ?
+        LIMIT 1`,
+        [id],
+      );
+
+      if (!rows || rows.length === 0) {
+        throw new NotFoundException('Trip not found');
+      }
+
+      const r = rows[0];
+
+      return {
+        id: r.id,
+        from: r.origin,
+        to: r.destination,
+        date: r.trip_date,
+        seatsAvailable: r.available_seats,
+        description: r.description,
+        tripType: r.type,
+        creatorId: r.creator_id,
+        firstName: r.first_name,
+        profilePhoto: r.profile_photo,
+        distance: null,
+      };
+    } catch (error) {
+      console.error('❌ Database Error (findOne):', error);
+      throw error;
+    }
+  }
+
+  // ---------------------------------------------------
+  // ⭐ NEW: DELETE TRIP (with ownership check + broadcast)
+  // ---------------------------------------------------
+  // ---------------------------------------------------
+  // DELETE TRIP (safe delete with FK cleanup)
+  // ---------------------------------------------------
+  async delete(tripId: number, userId: number) {
+    try {
+      // 1️⃣ Verify ownership
+      const [rows]: any = await this.db.query(
+        'SELECT creator_id FROM trips WHERE id = ? LIMIT 1',
+        [tripId],
+      );
+
+      if (!rows || rows.length === 0) {
+        throw new NotFoundException('Trip not found');
+      }
+
+      if (rows[0].creator_id !== userId) {
+        throw new ForbiddenException('You cannot delete this trip');
+      }
+
+      // 2️⃣ DELETE all notifications linked to the trip
+      await this.db.query('DELETE FROM notifications WHERE trip_id = ?', [
+        tripId,
+      ]);
+
+      // 3️⃣ DELETE interest requests linked to this trip
+      await this.db.query('DELETE FROM interest_requests WHERE trip_id = ?', [
+        tripId,
+      ]);
+
+      // 4️⃣ Now delete the trip safely
+      await this.db.query('DELETE FROM trips WHERE id = ?', [tripId]);
+
+      // 5️⃣ Broadcast real-time deletion
+      this.notificationsGateway.sendTripDeleted(tripId);
+
+      return { message: 'Trip deleted successfully' };
+    } catch (error) {
+      console.error('❌ Database Error (delete):', error);
+      throw error;
+    }
+  }
+
+  // ---------------------------
+  // PHOTO SECTION
+  // ---------------------------
+
+  async createPhoto(createPhotoDto: CreatePhotoDto, userId: number) {
+    const { photo_url, location, description } = createPhotoDto;
+
+    try {
+      if (!location || location.trim().length === 0) {
+        throw new BadRequestException('Location is required');
+      }
+
+      const coords = await getCoordinates(location);
+
+      if (!coords || !coords.lat || !coords.lng) {
+        throw new BadRequestException('Invalid location');
+      }
+
+      const { lat, lng } = coords;
+
+      await this.db.query(
+        `INSERT INTO photos 
+        (user_id, photo_url, location, description, photo_lat, photo_lng)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [userId, photo_url, location, description, lat, lng],
+      );
+
+      return { message: 'Photo post created successfully' };
+    } catch (error) {
+      console.error('❌ Database Error (createPhoto):', error);
+      throw error;
+    }
+  }
+
+  async getAllPhotos(userLat?: number, userLng?: number) {
+    try {
+      if (!userLat || !userLng) {
+        const [rows]: any = await this.db.query(
+          `SELECT 
+            photos.id,
+            photos.photo_url,
+            photos.location,
+            photos.description,
+            photos.created_at,
+            users.first_name,
+            users.profile_photo
+          FROM photos
+          JOIN users ON photos.user_id = users.id
+          ORDER BY photos.created_at DESC`,
+        );
+        return rows;
+      }
+
+      const [rows]: any = await this.db.query(
+        `SELECT 
+            photos.id,
+            photos.photo_url,
+            photos.location,
+            photos.description,
+            photos.created_at,
+            photos.photo_lat,
+            photos.photo_lng,
+            users.first_name,
+            users.profile_photo,
+            (6371 * acos(
+              cos(radians(?)) *
+              cos(radians(photo_lat)) *
+              cos(radians(photo_lng) - radians(?)) +
+              sin(radians(?)) *
+              sin(radians(photo_lat))
+            )) AS distance
+         FROM photos
+         JOIN users ON photos.user_id = users.id
+         WHERE photo_lat IS NOT NULL AND photo_lng IS NOT NULL
+         ORDER BY distance ASC`,
+        [userLat, userLng, userLat],
+      );
+
+      return rows;
+    } catch (error) {
+      console.error('❌ Database Error (getAllPhotos):', error);
+      throw error;
+    }
+  }
+
+  async getPhotosByUser(userId: number) {
+    try {
+      const [data] = await this.db.query(
+        `SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC`,
+        [userId],
+      );
+      return data;
+    } catch (error) {
+      console.error('❌ Database Error (getPhotosByUser):', error);
+      throw error;
+    }
+  }
+}
+
+
+
+// src/navigation/BottomNavigator.js
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React, { useContext } from "react";
 import { Image, View, Text } from "react-native";
+
 import HomeScreen from "../screens/HomeScreen";
 import MessagesScreen from "../screens/MessagesScreen";
 import PostScreen from "../screens/PostScreen";
 import ProfilePassengerView from "../screens/ProfilePassengerView";
 import NotificationsScreen from "../screens/NotificationScreen";
+
 import { NotificationContext } from "../context/NotificationContext";
+import { MessageContext } from "../context/MessageContext";
 
 const Tab = createBottomTabNavigator();
 
@@ -1781,9 +1566,51 @@ const NotificationTabIcon = ({ focused }) => {
   );
 };
 
-const BottomNavigator = () => {
-  const { setUnreadCount } = useContext(NotificationContext);
+const MessageTabIcon = ({ focused }) => {
+  const { unreadMessages } = useContext(MessageContext);
 
+  return (
+    <View>
+      <Image
+        source={require("../assets/messages.png")}
+        style={{
+          width: 35,
+          height: 35,
+          tintColor: focused ? "white" : "#7282ab",
+        }}
+      />
+
+      {unreadMessages > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -6,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 10,
+            backgroundColor: "white",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 3,
+          }}
+        >
+          <Text
+            style={{
+              color: "#061237",
+              fontSize: 12,
+              fontWeight: "700",
+            }}
+          >
+            {unreadMessages > 99 ? "99+" : String(unreadMessages)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const BottomNavigator = () => {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -1808,7 +1635,6 @@ const BottomNavigator = () => {
         name="Home"
         component={HomeScreen}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Image
               source={require("../assets/home.png")}
@@ -1826,17 +1652,7 @@ const BottomNavigator = () => {
         name="Messages"
         component={MessagesScreen}
         options={{
-          headerShown: false,
-          tabBarIcon: ({ focused }) => (
-            <Image
-              source={require("../assets/messages.png")}
-              style={{
-                width: 35,
-                height: 35,
-                tintColor: focused ? "white" : "#7282ab",
-              }}
-            />
-          ),
+          tabBarIcon: ({ focused }) => <MessageTabIcon focused={focused} />,
         }}
       />
 
@@ -1844,7 +1660,6 @@ const BottomNavigator = () => {
         name="Post"
         component={PostScreen}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Image
               source={require("../assets/post.png")}
@@ -1861,13 +1676,7 @@ const BottomNavigator = () => {
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
-        listeners={{
-          tabPress: () => {
-            setUnreadCount(0);
-          },
-        }}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <NotificationTabIcon focused={focused} />
           ),
@@ -1878,7 +1687,6 @@ const BottomNavigator = () => {
         name="Profile"
         component={ProfilePassengerView}
         options={{
-          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Image
               source={require("../assets/profile.png")}
@@ -1897,70 +1705,118 @@ const BottomNavigator = () => {
 
 export default BottomNavigator;
 
+
+
+// src/common/Chat.js
 import React from "react";
-import { View, Text, Image, TouchableOpacity, ScrollView } from "react-native";
-import styles from "../styles/PhotoCard_styles";
+import { Text, View, Image, TouchableOpacity } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import styles from "../styles/ChatItem_styles";
 
-const PhotoCard = ({ userName, caption, photos = [] }) => {
+const Chat = ({ conversation }) => {
+  const navigation = useNavigation();
+
+  const {
+    conversationId,
+    otherUserId,
+    otherUserName,
+    otherUserPhoto,
+    lastMessageText,
+    lastMessageTime,
+    unreadCount,
+  } = conversation;
+
+  const isUnread = unreadCount > 0;
+
   return (
-    <TouchableOpacity activeOpacity={0.9}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.profilePicture}>
-            <Image
-              source={require("../assets/profile-picture.jpeg")}
-              resizeMode="cover"
-              style={styles.profileImage}
-            />
-          </View>
+    <TouchableOpacity
+      style={[styles.card, isUnread && styles.cardUnread]}
+      onPress={() =>
+        navigation.navigate("Chat", {
+          conversationId,
+          receiverId: otherUserId,
+          receiverName: otherUserName,
+          receiverPhoto: otherUserPhoto,
+        })
+      }
+    >
+      {/* Profile Picture */}
+      <Image
+        source={
+          otherUserPhoto
+            ? { uri: otherUserPhoto }
+            : require("../assets/profile-picture.jpeg")
+        }
+        style={styles.profileImage}
+      />
 
-          <View>
-            <Text style={styles.userName}>{userName}</Text>
-            <Text style={styles.subText}>Shared a photo</Text>
-          </View>
-        </View>
+      {/* Middle Section */}
+      <View style={styles.middle}>
+        <Text style={[styles.name, isUnread && styles.nameUnread]}>
+          {otherUserName}
+        </Text>
 
-        {/* Photos */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.photoScroll}
-          contentContainerStyle={{ paddingRight: 10 }}
-          directionalLockEnabled={true}
-          nestedScrollEnabled={true}
-          scrollEventThrottle={16}
+        <Text
+          style={[styles.lastMessage, isUnread && styles.lastMessageUnread]}
+          numberOfLines={1}
         >
-          {photos.map((photo, index) => (
-            <Image
-              key={index}
-              source={{ uri: photo }}
-              style={styles.photo}
-              resizeMode="cover"
-            />
-          ))}
-        </ScrollView>
+          {lastMessageText || "No messages yet"}
+        </Text>
+      </View>
 
-        {caption && <Text style={styles.caption}>{caption}</Text>}
+      {/* Right Side: Time + Badge */}
+      <View style={styles.rightSection}>
+        <Text style={styles.time}>
+          {lastMessageTime
+            ? new Date(lastMessageTime).toLocaleDateString("en-GB", {
+                day: "2-digit",
+                month: "short",
+              })
+            : ""}
+        </Text>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>12 Oct 2025</Text>
-        </View>
+        {isUnread && (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadBadgeText}>
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
 };
 
-export default PhotoCard;
+export default Chat;
+
+
+
+
+
 
 // src/common/TravelCard.js
-import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  Animated,
+  ActivityIndicator,
+} from "react-native";
 import styles from "../styles/TravelCard_styles";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
 import { getSocket, onSocketReady } from "../socket";
+import { countryFlags } from "../common/Flags";
+
+const getFlagForLocation = (location) => {
+  if (!location || typeof location !== "string") return "";
+  const parts = location.split(",");
+  const country = parts[parts.length - 1].trim();
+  return countryFlags[country] || "";
+};
 
 const TravelCard = ({
   firstName,
@@ -1978,14 +1834,40 @@ const TravelCard = ({
   embeddedMode,
   notifType,
   interestRequestId,
+
+  // Used in notification popup
+  senderId,
+  senderName,
+  senderPhoto,
+
+  // NEW for collapse animation
+  onTripDeleted,
 }) => {
+  if (!tripId || isNaN(Number(tripId))) {
+    console.log("❌ INVALID tripId passed to TravelCard:", tripId);
+    return null;
+  }
+
+  const navigation = useNavigation();
+
+  // -----------------------------------
+  // STATE
+  // -----------------------------------
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState(initialStatus ?? null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const navigation = useNavigation();
+  // -----------------------------------
+  // ANIMATION VALUES
+  // -----------------------------------
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const collapseAnim = useRef(new Animated.Value(1)).current;
 
+  // -----------------------------------
+  // LOAD USER ID
+  // -----------------------------------
   useEffect(() => {
     const loadUser = async () => {
       const storedId = await AsyncStorage.getItem("userId");
@@ -1996,6 +1878,9 @@ const TravelCard = ({
 
   const isOwner = currentUserId === creatorId;
 
+  // -----------------------------------
+  // STATUS LOADING
+  // -----------------------------------
   useEffect(() => {
     if (initialStatus !== undefined) {
       setStatus(initialStatus);
@@ -2028,6 +1913,9 @@ const TravelCard = ({
     loadStatus();
   }, [tripId]);
 
+  // -----------------------------------
+  // SOCKET LISTENERS
+  // -----------------------------------
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -2056,9 +1944,11 @@ const TravelCard = ({
     });
   }, [tripId]);
 
+  // -----------------------------------
+  // SEND INTEREST
+  // -----------------------------------
   const handleInterest = async () => {
-    if (isRequesting) return;
-    if (status === "pending" || status === "accepted") return;
+    if (isRequesting || status === "pending" || status === "accepted") return;
 
     setIsRequesting(true);
     try {
@@ -2071,16 +1961,12 @@ const TravelCard = ({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ tripId: tripId, ownerId: creatorId }),
+        body: JSON.stringify({ tripId, ownerId: creatorId }),
       });
 
       const data = await res.json();
-
-      if (data && data.status) {
-        setStatus(data.status);
-      } else {
-        setStatus("pending");
-      }
+      if (data?.status) setStatus(data.status);
+      else setStatus("pending");
     } catch (err) {
       console.log("Error:", err);
     } finally {
@@ -2088,41 +1974,51 @@ const TravelCard = ({
     }
   };
 
-  const handleAccept = async () => {
-    const token = await AsyncStorage.getItem("token");
-    try {
-      await fetch(`${BASE_URL}/interest_requests/${interestRequestId}/accept`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  // -----------------------------------
+  // DELETE TRIP (with collapse animation)
+  // -----------------------------------
+  const handleDeleteTrip = async () => {
+    if (isDeleting) return;
 
-      setStatus("accepted");
-    } catch (err) {
-      console.log("Accept error:", err);
-    }
-  };
+    setIsDeleting(true);
 
-  const handleDecline = async () => {
-    const token = await AsyncStorage.getItem("token");
     try {
-      await fetch(`${BASE_URL}/interest_requests/${interestRequestId}`, {
+      const token = await AsyncStorage.getItem("token");
+
+      await fetch(`${BASE_URL}/post/${tripId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      setStatus(null);
+      // Animate the collapse
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(collapseAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        if (onTripDeleted) onTripDeleted(tripId);
+      });
     } catch (err) {
-      console.log("Decline error:", err);
+      console.log("❌ Delete trip error:", err);
+      setIsDeleting(false);
     }
   };
 
-  const originCity = from ? from.split(/[ ,]+/)[0] : "";
-  const destinationCity = to ? to.split(/[ ,]+/)[0] : "";
+  // -----------------------------------
+  // FORMAT UI VALUES
+  // -----------------------------------
+  const originCity = from?.split(",")[0]?.trim() || "";
+  const destinationCity = to?.split(",")[0]?.trim() || "";
+
+  const originFlag = getFlagForLocation(from);
+  const destinationFlag = getFlagForLocation(to);
 
   let formattedDate = "";
   if (date) {
@@ -2144,14 +2040,12 @@ const TravelCard = ({
         setAvatarSource({ uri: profilePhoto });
         return;
       }
-
       const stored = await AsyncStorage.getItem("profilePhoto");
       if (stored) {
         setAvatarSource({ uri: stored });
         return;
       }
     };
-
     loadAvatar();
   }, [profilePhoto]);
 
@@ -2162,12 +2056,27 @@ const TravelCard = ({
       ? "Pending"
       : "Send Message";
 
-  const buttonDisabled = isOwner || status === "pending" || isRequesting;
+  const chatUserId = embeddedMode && senderId ? senderId : creatorId;
+  const chatUserName = embeddedMode && senderName ? senderName : firstName;
+  const chatUserPhoto =
+    embeddedMode && senderPhoto ? senderPhoto : profilePhoto;
 
+  // -----------------------------------
+  // RENDER
+  // -----------------------------------
   return (
-    <TouchableOpacity activeOpacity={0.9}>
-      <View style={styles.container}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scaleY: collapseAnim }],
+        },
+      ]}
+    >
+      <TouchableOpacity activeOpacity={0.9}>
         <View>
+          {/* PROFILE HEADER */}
           <View style={styles.rowCenter}>
             <TouchableOpacity
               onPress={() =>
@@ -2193,6 +2102,7 @@ const TravelCard = ({
             </View>
           </View>
 
+          {/* LOGO + DISTANCE */}
           <View style={styles.logoContainer}>
             <Image
               source={require("../assets/logo.png")}
@@ -2205,488 +2115,188 @@ const TravelCard = ({
               </Text>
             )}
           </View>
-        </View>
 
-        <View style={styles.destination}>
-          <Text
-            style={styles.destinationText}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
+          {/* DESTINATION */}
+          <View style={styles.destination}>
+            <Text
+              style={styles.destinationText}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {originCity} {originFlag} → {destinationCity} {destinationFlag}
+            </Text>
+            <Text style={styles.date}>{formattedDate}</Text>
+          </View>
+
+          {/* DESCRIPTION EXPAND */}
+          <TouchableOpacity
+            style={styles.description}
+            onPress={() => setExpanded(!expanded)}
           >
-            {originCity} → {destinationCity}
-          </Text>
-          <Text style={styles.date}>{formattedDate}</Text>
-        </View>
+            <Text
+              style={styles.descriptionText}
+              numberOfLines={expanded ? undefined : 3}
+            >
+              {description}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.description}
-          onPress={() => setExpanded(!expanded)}
-        >
-          <Text
-            style={styles.descriptionText}
-            numberOfLines={expanded ? undefined : 3}
-          >
-            {description}
-          </Text>
-        </TouchableOpacity>
+          {/* FOOTER */}
+          <View style={styles.footer}>
+            <Text style={styles.seatsAvailable}>
+              {seatsAvailable} Seats available
+            </Text>
 
-        <View style={styles.footer}>
-          <Text style={styles.seatsAvailable}>
-            {seatsAvailable} Seats available
-          </Text>
-
-          {/* 🔥 OWNER VIEW: popup request actions (✓ / ✕ buttons) */}
-          {embeddedMode &&
-            notifType === "interest_request" &&
-            isOwner &&
-            status !== "accepted" && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 14,
-                  alignItems: "center",
-                  marginTop: 10,
-                }}
+            {/* OWNER DELETE BUTTON */}
+            {isOwner && (
+              <TouchableOpacity
+                onPress={handleDeleteTrip}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: "#d11",
+                    width: 120,
+                  },
+                ]}
               >
-                {/* ACCEPT BUTTON */}
-                <TouchableOpacity
-                  onPress={handleAccept}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: "white",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: "#061237",
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginTop: -2,
-                    }}
-                  >
-                    ✓
+                {isDeleting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={[styles.buttonText, { color: "white" }]}>
+                    Delete
                   </Text>
-                </TouchableOpacity>
-
-                {/* DECLINE BUTTON */}
-                <TouchableOpacity
-                  onPress={handleDecline}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: "white",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: "#061237",
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginTop: -2,
-                    }}
-                  >
-                    ✕
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                )}
+              </TouchableOpacity>
             )}
 
-          {/* 🔥 NORMAL VIEW (feed card for non-owner) */}
-          {!embeddedMode && !isOwner && (
-            <TouchableOpacity
-              style={[
-                styles.button,
-                buttonDisabled ? { opacity: 0.6 } : undefined,
-              ]}
-              onPress={() => {
-                if (status === "accepted") {
-                  navigation.navigate("ChatTest", { userId: creatorId });
-                } else {
-                  handleInterest();
-                }
-              }}
-              disabled={buttonDisabled}
-            >
-              <Text style={styles.buttonText}>{buttonLabel}</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* 🔥 SHOW SEND MESSAGE WHEN CHAT IS POSSIBLE */}
-          {embeddedMode &&
-            // Requester receiving acceptance notification
-            (notifType === "interest_accepted" ||
-              // Owner accepted request
-              (notifType === "interest_request" &&
-                isOwner &&
-                status === "accepted")) && (
+            {/* NON-OWNER BUTTONS */}
+            {!embeddedMode && !isOwner && (
               <TouchableOpacity
                 style={[
                   styles.button,
-                  { backgroundColor: "white", opacity: 1 },
+                  isRequesting || status === "pending"
+                    ? { opacity: 0.6 }
+                    : undefined,
                 ]}
-                onPress={() =>
-                  navigation.navigate("ChatTest", { userId: creatorId })
-                }
+                onPress={async () => {
+                  if (status === "accepted") {
+                    const token = await AsyncStorage.getItem("token");
+
+                    const res = await fetch(`${BASE_URL}/conversations/start`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        otherUserId: creatorId,
+                      }),
+                    });
+
+                    const data = await res.json();
+                    const conversationId = data.conversationId;
+
+                    navigation.navigate("Chat", {
+                      conversationId,
+                      receiverId: creatorId,
+                      receiverName: firstName,
+                      receiverPhoto: profilePhoto,
+                    });
+                  } else {
+                    handleInterest();
+                  }
+                }}
+                disabled={isRequesting || status === "pending"}
               >
-                <Text style={styles.buttonText}>Send Message</Text>
+                <Text style={styles.buttonText}>{buttonLabel}</Text>
               </TouchableOpacity>
             )}
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
 export default TravelCard;
 
-import React, { useState } from "react";
-import { Text, TouchableOpacity, View, Image } from "react-native";
-import styles from "../styles/Trip_styles";
-import { useNavigation } from "@react-navigation/native";
-import { countryFlags } from "../common/Flags";
 
-const Trip = ({
-  from,
-  to,
-  date,
-  seatsAvailable,
-  description,
-  tripType,
-  firstName,
-}) => {
-  const [expanded, setExpanded] = useState(false);
-  const navigation = useNavigation();
-
-  // Extract city + country
-  const originCity = from ? from.split(/[ ,]+/)[0] : "";
-  const destinationCity = to ? to.split(/[ ,]+/)[0] : "";
-  const originCountry = from ? from.split(/[ ,]+/)[1] : "";
-  const destinationCountry = to ? to.split(/[ ,]+/)[1] : "";
-
-  // Match flags
-  let originFlag = "";
-  let destinationFlag = "";
-  const safeOrigin = originCountry ? originCountry.toLowerCase() : "";
-  const safeDestination = destinationCountry
-    ? destinationCountry.toLowerCase()
-    : "";
-
-  for (const [country, flag] of Object.entries(countryFlags)) {
-    const lower = country.toLowerCase();
-    if (lower === safeOrigin) originFlag = flag;
-    if (lower === safeDestination) destinationFlag = flag;
-  }
-
-  // Format date
-  let formattedDate = "";
-  if (date) {
-    formattedDate = new Date(date).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "long",
-    });
-    formattedDate =
-      formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
-  }
-
-  return (
-    <TouchableOpacity activeOpacity={0.9}>
-      <View style={styles.container}>
-        {/* Profile + TripType */}
-        <View style={styles.rowCenter}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate("Profile")}
-            style={styles.profilePicture}
-          >
-            <Image
-              source={require("../assets/profile-picture.jpeg")}
-              resizeMode="cover"
-              style={styles.profileImage}
-            />
-          </TouchableOpacity>
-
-          <View style={styles.columnStart}>
-            <Text style={styles.userName}>{firstName}</Text>
-            <View style={styles.seekingRideContainer}>
-              <Text style={{ color: "white", fontWeight: "700" }}>
-                {tripType === "Offering" ? "Offering A Ride" : "Seeking A Ride"}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("../assets/logo.png")}
-            resizeMode="contain"
-            style={styles.logo}
-          />
-        </View>
-
-        {/* Destination & Date */}
-        <View style={styles.destination}>
-          <Text
-            style={styles.destinationText}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
-          >
-            {originCity} {originFlag} → {destinationCity} {destinationFlag}
-          </Text>
-          <Text style={styles.date}>{formattedDate}</Text>
-        </View>
-
-        {/* Description */}
-        <TouchableOpacity
-          style={styles.description}
-          onPress={() => setExpanded(!expanded)}
-        >
-          <Text
-            style={styles.descriptionText}
-            numberOfLines={expanded ? undefined : 3}
-            ellipsizeMode="tail"
-          >
-            {description}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.seatsAvailable}>
-            {seatsAvailable} SEATS AVAILABLE
-          </Text>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}>Active 🟢</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-export default Trip;
-
-import React, { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, ScrollView } from "react-native";
-import TravelCard from "../common/TravelCard";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import BASE_URL from "../config/api";
-
-export default function TripViewScreen({ route }) {
-  const tripId = route?.params?.tripId;
-
-  // 🔥 FIX: Prevent NaN / undefined crash
-  if (!tripId) {
-    console.log(
-      "❌ TripViewScreen opened WITHOUT tripId → preventing NaN fetch"
-    );
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#061237",
-        }}
-      >
-        <Text style={{ color: "white" }}>
-          Trip unavailable. Missing tripId.
-        </Text>
-      </View>
-    );
-  }
-
-  const [trip, setTrip] = useState(null);
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-
-        // LOAD TRIP
-        const res = await fetch(`${BASE_URL}/post/${tripId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const tripData = await res.json();
-        setTrip(tripData);
-
-        // LOAD INTEREST STATUS
-        const sRes = await fetch(
-          `${BASE_URL}/interest_requests/status/${tripId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const sData = await sRes.json();
-        setStatus(sData.status || null);
-      } catch (err) {
-        console.log("TripView error:", err);
-      }
-      setLoading(false);
-    };
-
-    load();
-  }, [tripId]);
-
-  if (loading || !trip) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#061237",
-        }}
-      >
-        <ActivityIndicator size="large" color="white" />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView
-      contentContainerStyle={{
-        padding: 20,
-        backgroundColor: "#061237",
-        flexGrow: 1,
-      }}
-    >
-      <TravelCard {...trip} initialStatus={status} />
-    </ScrollView>
-  );
-}
-
-const BASE_URL = "https://comeatable-aerobically-lucile.ngrok-free.dev";
-
-export default BASE_URL;
-
-// src/context/NotificationContext.js
 import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, onSocketReady, connectSocket } from "../socket";
 import BASE_URL from "../config/api";
+import { AppState } from "react-native";
 
 export const NotificationContext = createContext({
   unreadCount: 0,
   setUnreadCount: () => {},
 });
 
-let __global_listeners_attached = false;
-let __initial_load_promise = null;
-
 export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const mountedRef = useRef(true);
+  const listenersAttached = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
+    return () => (mountedRef.current = false);
   }, []);
 
-  // 🔵 Fetch unread notifications from server
   const fetchInitialUnread = async () => {
-    if (!__initial_load_promise) {
-      __initial_load_promise = (async () => {
-        try {
-          const token = await AsyncStorage.getItem("token");
-          if (!token) return 0;
-
-          const res = await fetch(`${BASE_URL}/notifications`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const data = await res.json();
-          return Array.isArray(data) ? data.length : 0;
-        } catch (e) {
-          console.log("[NotificationProvider] initial fetch err", e);
-          return 0;
-        }
-      })();
-    }
-
     try {
-      const value = await __initial_load_promise;
-      if (mountedRef.current) setUnreadCount(value);
-    } catch (e) {
-      console.log("[NotificationProvider] initial fetch failed", e);
-    }
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+
+      const res = await fetch(`${BASE_URL}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      const count = Array.isArray(data) ? data.length : 0;
+
+      if (mountedRef.current) setUnreadCount(count);
+    } catch {}
+  };
+
+  const initSocketSafely = async () => {
+    const userId = await AsyncStorage.getItem("userId");
+    if (!userId) return;
+
+    await connectSocket();
+    fetchInitialUnread();
   };
 
   useEffect(() => {
-    connectSocket().catch(() => {});
+    initSocketSafely();
+  }, []);
 
-    fetchInitialUnread();
+  // Re-identify on resume
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", async (state) => {
+      if (state === "active") {
+        const socket = getSocket();
+        const userId = await AsyncStorage.getItem("userId");
+        if (socket && socket.connected && userId) {
+          socket.emit("identify", { userId });
+        }
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
-    // 🔵 Attach socket listeners once
+  // FIX: attach socket listeners only ONCE
+  useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
-      if (!socket) return;
+      if (!socket || listenersAttached.current) return;
 
-      // 🚀 NEW: ALWAYS re-sync unread badge when socket connects
-      socket.on("connect", () => {
-        console.log(
-          "[NotificationProvider] socket reconnected → refreshing unread"
-        );
-        fetchInitialUnread(); // <--- THE NEW FIX
+      socket.off("new_notification");
+      socket.on("new_notification", () => {
+        setUnreadCount((prev) => prev + 1);
       });
 
-      if (__global_listeners_attached) return;
-
-      const newNotificationHandler = (notif) => {
-        try {
-          setUnreadCount((prev) => {
-            const next = prev + 1;
-            console.log("[NotificationProvider] unread ->", prev, "=>", next);
-            return next;
-          });
-        } catch (e) {
-          console.log("[NotificationProvider] newNotification handler err", e);
-        }
-      };
-
-      const deletionHandler = (payload) => {
-        try {
-          setUnreadCount((prev) => Math.max(prev - 1, 0));
-          console.log("[NotificationProvider] notification_deleted", payload);
-        } catch (e) {
-          console.log("[NotificationProvider] deletion handler err", e);
-        }
-      };
-
-      const clearedHandler = () => {
-        try {
-          setUnreadCount(0);
-          console.log("[NotificationProvider] notifications_cleared");
-        } catch (e) {
-          console.log("[NotificationProvider] cleared handler err", e);
-        }
-      };
-
-      socket.on("new_notification", newNotificationHandler);
-      socket.on("notification_deleted", deletionHandler);
-      socket.on("notifications_cleared", clearedHandler);
-
-      try {
-        socket.__notif_handlers = {
-          newNotificationHandler,
-          deletionHandler,
-          clearedHandler,
-        };
-      } catch {}
-
-      __global_listeners_attached = true;
-      console.log("[NotificationProvider] listeners attached");
+      listenersAttached.current = true;
     });
   }, []);
 
@@ -2698,295 +2308,583 @@ export const NotificationProvider = ({ children }) => {
 };
 
 
-import React, { useState } from "react";
+
+// src/screens/HomeScreen.js
+import React, { useState, useEffect } from "react";
 import {
-  Text,
   View,
+  RefreshControl,
   TextInput,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
-import styles from "../styles/RegisterScreen_styles";
-import Title from "../common/Title";
-import SuccessMessageBox from "../common/SuccessMessageBox";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FlashList } from "@shopify/flash-list";
+import TravelCard from "../common/TravelCard";
+import PhotoCard from "../common/PhotoCard";
+import styles from "../styles/HomeScreen_styles";
+import * as Location from "expo-location";
 import BASE_URL from "../config/api";
+import { getSocket, onSocketReady } from "../socket";
 
-const RegisterScreen = ({ navigation }) => {
-  const [first_name, setFirstName] = useState("");
-  const [last_name, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmedPassword, setConfirmedPassword] = useState("");
-  const [visible, setVisible] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
+const HomeScreen = () => {
+  const [items, setItems] = useState([]);
+  const [filteredItems, setFilteredItems] = useState([]);
+  const [search, setSearch] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [userLat, setUserLat] = useState(null);
+  const [userLng, setUserLng] = useState(null);
 
-  const handleRegister = async () => {
+  // ----------------------------------------------------
+  // DELETE HANDLER (fixes the big empty space)
+  // ----------------------------------------------------
+  const handleTripDeleted = (deletedId) => {
+    setItems((prev) => prev.filter((item) => item.id !== deletedId));
+    setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
+  };
+
+  // ----------------------------------------------------
+  // FETCH ALL TRIPS + PHOTOS
+  // ----------------------------------------------------
+  const fetchAll = async (lat, lng) => {
     try {
-      // 🔥 important: reset previous session automatically
-      await AsyncStorage.removeItem("token");
-      await AsyncStorage.removeItem("userId");
+      const [tripsRes, photosRes] = await Promise.all([
+        fetch(`${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`),
+        fetch(`${BASE_URL}/post/photos?lat=${lat}&lng=${lng}`),
+      ]);
 
-      const response = await fetch(`${BASE_URL}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          first_name,
-          last_name,
-          email,
-          password,
-          confirmedPassword,
-        }),
-      });
+      const trips = await tripsRes.json().catch(() => []);
+      const rawPhotos = await photosRes.json().catch(() => []);
 
-      const data = await response.json();
-      const messageText = Array.isArray(data.message)
-        ? data.message[0]
-        : data.message;
+      const photos = Array.isArray(rawPhotos) ? rawPhotos : [];
 
-      if (response.ok && data.token) {
-        // save token + userId
-        await AsyncStorage.setItem("token", data.token);
-        if (data.user?.id) {
-          await AsyncStorage.setItem("userId", data.user.id.toString());
-        }
+      const merged = [
+        ...trips.map((t) => ({ ...t, feedType: "trip" })),
+        ...photos.map((p) => ({ ...p, feedType: "photo" })),
+      ];
 
-        setMessageType("success");
-        setMessage(messageText);
-        setVisible(true);
-        setTimeout(() => setVisible(false), 1500);
+      merged.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
-        setTimeout(() => {
-          navigation.navigate("CompleteProfileScreen");
-        }, 1000);
-      } else {
-        setMessageType("error");
-        setMessage(messageText);
-        setVisible(true);
-        setTimeout(() => setVisible(false), 2000);
-      }
-    } catch (error) {
-      console.error("❌ Registration error:", error);
+      setItems(merged);
+    } catch (e) {
+      console.log("❌ Fetch error:", e);
+    } finally {
+      setRefreshing(false);
     }
   };
 
+  // ----------------------------------------------------
+  // LOAD LOCATION + FETCH
+  // ----------------------------------------------------
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      const loc = await Location.getCurrentPositionAsync({});
+      const lat = loc.coords.latitude;
+      const lng = loc.coords.longitude;
+
+      setUserLat(lat);
+      setUserLng(lng);
+
+      fetchAll(lat, lng);
+    })();
+  }, []);
+
+  // ----------------------------------------------------
+  // SOCKET LISTENERS
+  // ----------------------------------------------------
+  useEffect(() => {
+    onSocketReady(() => {
+      const socket = getSocket();
+      if (!socket) return;
+
+      socket.on("new_notification", () => {
+        if (userLat && userLng) fetchAll(userLat, userLng);
+      });
+
+      socket.on("trip_deleted", ({ tripId }) => {
+        console.log("🔥 Trip deleted event received:", tripId);
+        handleTripDeleted(tripId);
+      });
+
+      return () => {
+        socket.off("new_notification");
+        socket.off("trip_deleted");
+      };
+    });
+  }, [userLat, userLng]);
+
+  // ----------------------------------------------------
+  // SEARCH FILTER
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!search.trim()) {
+      setFilteredItems(items);
+      return;
+    }
+
+    const lower = search.toLowerCase();
+
+    const results = items.filter((it) => {
+      const a = it.origin ?? "";
+      const b = it.destination ?? "";
+      return `${a} ${b}`.toLowerCase().includes(lower);
+    });
+
+    setFilteredItems(results);
+  }, [search, items]);
+
+  // ----------------------------------------------------
+  // RENDER
+  // ----------------------------------------------------
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-        style={styles.container}
-      >
-        <View style={styles.container}>
-          <Title style={styles.title} />
+      <View style={styles.container}>
+        <FlashList
+          data={filteredItems}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchAll(userLat, userLng)}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.headerContainer}>
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search trips..."
+                placeholderTextColor="#9bb0d4"
+                style={styles.searchBar}
+              />
+            </View>
+          }
+          renderItem={({ item }) => {
+            if (item.feedType === "photo") {
+              return (
+                <PhotoCard
+                  userName={item.first_name}
+                  caption={item.description}
+                  photos={[item.photo_url]}
+                  profilePhoto={item.profile_photo}
+                />
+              );
+            }
 
-          <TextInput
-            placeholder="First Name"
-            placeholderTextColor="white"
-            style={styles.TextInput}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            placeholder="Last Name"
-            placeholderTextColor="white"
-            style={styles.TextInput}
-            onChangeText={setLastName}
-          />
-          <TextInput
-            placeholder="Email"
-            placeholderTextColor="white"
-            style={styles.TextInput}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            placeholder="Password"
-            placeholderTextColor="white"
-            secureTextEntry
-            style={styles.TextInput}
-            onChangeText={setPassword}
-          />
-          <TextInput
-            placeholder="Confirm Password"
-            placeholderTextColor="white"
-            secureTextEntry
-            style={styles.TextInput}
-            onChangeText={setConfirmedPassword}
-          />
+            if (item.feedType === "trip") {
+              const tripLabel = item.trip_type || item.type || "trip";
 
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={handleRegister}
-          >
-            <Text style={styles.registerButtonText}>Continue</Text>
-          </TouchableOpacity>
+              return (
+                <TravelCard
+                  from={item.origin}
+                  to={item.destination}
+                  date={item.trip_date}
+                  seatsAvailable={item.available_seats}
+                  description={item.description}
+                  tripType={tripLabel}
+                  firstName={item.first_name}
+                  distance={item.distance}
+                  creatorId={item.creator_id}
+                  tripId={item.id}
+                  profilePhoto={item.profile_photo}
+                  onTripDeleted={handleTripDeleted} // ⭐ FIX ADDED
+                />
+              );
+            }
 
-          {visible && <SuccessMessageBox text={message} type={messageType} />}
-
-          <View style={styles.loginRedirect}>
-            <Text style={styles.haveAnAccountText}>
-              Already have an account?
-            </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-              <Text style={styles.goBackToSignInText}>Sign in</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+            return null;
+          }}
+          estimatedItemSize={400}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        />
+      </View>
     </TouchableWithoutFeedback>
   );
 };
 
-export default RegisterScreen;
+export default HomeScreen;
 
 
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image } from "react-native";
-import * as ImagePicker from "expo-image-picker";
+// src/screens/MessagesScreen.js
+import React, { useEffect, useState } from "react";
+import { View, TextInput, Image, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import styles from "../styles/CompleteProfileScreen_styles";
 import BASE_URL from "../config/api";
+import styles from "../styles/MessagesScreen_styles";
+import Chat from "../common/Chat";
+import { getSocket, onSocketReady } from "../socket";
+import { useIsFocused } from "@react-navigation/native";
 
-const CLOUD_NAME = "del5ajmby";
-const UPLOAD_PRESET = "profile_preset";
+const MessagesScreen = () => {
+  const [conversations, setConversations] = useState([]);
+  const isFocused = useIsFocused();
 
-const CompleteProfileScreen = ({ navigation }) => {
-  const [coverPhoto, setCoverPhoto] = useState(null);
-  const [profilePhoto, setProfilePhoto] = useState(null);
-  const [bio, setBio] = useState("");
-  const [city, setCity] = useState("");
-  const [interests, setInterests] = useState("");
-
-  const pickImage = async (type) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: type === "cover" ? [4, 2] : [1, 1],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      if (type === "cover") setCoverPhoto(result.assets[0].uri);
-      else setProfilePhoto(result.assets[0].uri);
-    }
-  };
-
-  const uploadToCloudinary = async (uri) => {
-    const data = new FormData();
-    data.append("file", {
-      uri,
-      type: "image/jpeg",
-      name: "upload.jpg",
-    });
-    data.append("upload_preset", UPLOAD_PRESET);
-
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      { method: "POST", body: data }
-    );
-
-    const result = await res.json();
-    return result.secure_url;
-  };
-
-  const handleContinue = async () => {
-    const token = await AsyncStorage.getItem("token");
-    if (!token) return;
-
+  const load = async () => {
     try {
-      let uploadedProfileUrl = null;
-      let uploadedCoverUrl = null;
-
-      if (profilePhoto) {
-        uploadedProfileUrl = await uploadToCloudinary(profilePhoto);
-        await AsyncStorage.setItem("profilePhoto", uploadedProfileUrl);
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        setConversations([]);
+        return;
       }
 
-      if (coverPhoto) {
-        uploadedCoverUrl = await uploadToCloudinary(coverPhoto);
-        await AsyncStorage.setItem("coverPhoto", uploadedCoverUrl);
-      }
-
-      await fetch(`${BASE_URL}/profile/setup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          bio,
-          city,
-          interests,
-          profile_photo: uploadedProfileUrl,
-          cover_photo: uploadedCoverUrl,
-        }),
+      const res = await fetch(`${BASE_URL}/conversations`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      navigation.navigate("BottomNavigator");
-    } catch (err) {
-      console.error("❌ Profile setup error:", err);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setConversations(list);
+    } catch {
+      setConversations([]);
     }
   };
+
+  // Refresh whenever screen is opened again
+  useEffect(() => {
+    if (isFocused) load();
+  }, [isFocused]);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    onSocketReady(() => {
+      const socket = getSocket();
+      if (!socket) return;
+
+      const handleNewMessage = () => load();
+
+      const handleConversationUpdate = (preview) => {
+        setConversations((prev) => {
+          const idx = prev.findIndex(
+            (c) => c.conversationId === preview.conversationId
+          );
+          if (idx === -1) return [preview, ...prev];
+          const updated = [...prev];
+          updated[idx] = preview;
+          return updated;
+        });
+      };
+
+      socket.on("newMessage", handleNewMessage);
+      socket.on("conversationUpdate", handleConversationUpdate);
+
+      return () => {
+        socket.off("newMessage", handleNewMessage);
+        socket.off("conversationUpdate", handleConversationUpdate);
+      };
+    });
+  }, []);
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.coverContainer}
-        onPress={() => pickImage("cover")}
-      >
-        {coverPhoto ? (
-          <Image source={{ uri: coverPhoto }} style={styles.coverPhoto} />
-        ) : (
-          <Text style={styles.addText}>+ Add Cover</Text>
-        )}
-      </TouchableOpacity>
+      <View style={styles.searchBar}>
+        <Image
+          source={require("../assets/searchIcon.png")}
+          resizeMode="cover"
+          style={styles.searchIcon}
+        />
 
-      <TouchableOpacity
-        style={styles.profileContainer}
-        onPress={() => pickImage("profile")}
-      >
-        {profilePhoto ? (
-          <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
-        ) : (
-          <Text style={styles.addText}>+</Text>
-        )}
-      </TouchableOpacity>
+        <TextInput
+          placeholderTextColor={"rgb(87,107,134)"}
+          placeholder="Search"
+          style={styles.searchBarTextInput}
+        />
+      </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Bio"
-        placeholderTextColor="#B0B0B0"
-        value={bio}
-        onChangeText={setBio}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="City"
-        placeholderTextColor="#B0B0B0"
-        value={city}
-        onChangeText={setCity}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Interests"
-        placeholderTextColor="#B0B0B0"
-        value={interests}
-        onChangeText={setInterests}
-      />
-
-      <TouchableOpacity style={styles.button} onPress={handleContinue}>
-        <Text style={styles.buttonText}>Continue</Text>
-      </TouchableOpacity>
+      <ScrollView style={styles.scrollView}>
+        {conversations.map((c) => (
+          <Chat key={c.conversationId} conversation={c} />
+        ))}
+      </ScrollView>
     </View>
   );
 };
 
-export default CompleteProfileScreen;
+export default MessagesScreen;
+
+
+
+// src/screens/NotificationScreen.js
+import React, { useEffect, useState, useContext } from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  TouchableWithoutFeedback,
+  ActivityIndicator,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useIsFocused } from "@react-navigation/native";
+import { getSocket, onSocketReady } from "../socket";
+import BASE_URL from "../config/api";
+import { NotificationContext } from "../context/NotificationContext";
+import TravelCard from "../common/TravelCard";
+
+export default function NotificationsScreen() {
+  const [notifications, setNotifications] = useState([]);
+  const { setUnreadCount } = useContext(NotificationContext);
+
+  const isFocused = useIsFocused();
+
+  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [popupLoading, setPopupLoading] = useState(false);
+
+  const load = async () => {
+    const token = await AsyncStorage.getItem("token");
+    try {
+      const res = await fetch(`${BASE_URL}/notifications/all`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch {
+      setNotifications([]);
+    }
+  };
+
+  const openTripPopup = async (notification) => {
+    if (!notification) return;
+
+    const tripId = notification.trip_id;
+    setPopupLoading(true);
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const res = await fetch(`${BASE_URL}/post/${tripId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const tripData = await res.json();
+
+      // ⭐ ADD THESE 3 FIELDS
+      const senderId = notification.sender_id;
+      const senderName = notification.sender_name;
+      const senderPhoto = notification.sender_photo;
+
+      setSelectedTrip({
+        ...tripData,
+        tripId: tripData.id,
+        creatorId: tripData.creator_id,
+        interestRequestId: notification.interest_request_id,
+        notifType: notification.type,
+
+        // ⭐ REQUIRED FIX FOR CORRECT CHAT TARGET
+        senderId,
+        senderName,
+        senderPhoto,
+      });
+    } catch (err) {
+      console.log("Popup load error:", err);
+    }
+
+    setPopupLoading(false);
+  };
+
+  const closePopup = () => setSelectedTrip(null);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    onSocketReady(() => {
+      const socket = getSocket();
+      if (!socket) return;
+
+      socket.on("new_notification", () => load());
+      socket.on("notification_deleted", () => load());
+    });
+
+    return () => {
+      const socket = getSocket();
+      socket?.off("new_notification");
+      socket?.off("notification_deleted");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      setUnreadCount(0);
+    }
+  }, [isFocused]);
+
+  if (!notifications || notifications.length === 0) {
+    return (
+      <View style={[styles.centered, { backgroundColor: "#061237" }]}>
+        <Text style={{ color: "white", fontSize: 18 }}>
+          No notifications yet
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {notifications.map((n, i) => (
+          <TouchableOpacity
+            key={n.id || i}
+            style={styles.bubble}
+            onPress={() => openTripPopup(n)}
+          >
+            <View style={styles.headerRow}>
+              <Image
+                source={{
+                  uri: n.sender_photo || "https://i.stack.imgur.com/l60Hf.png",
+                }}
+                style={styles.avatar}
+              />
+              <Text style={styles.name}>{n.sender_name}</Text>
+            </View>
+
+            <Text style={styles.message}>{n.message}</Text>
+
+            {n.type === "interest_request" && (
+              <View style={styles.buttonsRowCircle}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    const token = await AsyncStorage.getItem("token");
+                    try {
+                      await fetch(
+                        `${BASE_URL}/interest_requests/${n.interest_request_id}/accept`,
+                        {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                        }
+                      );
+
+                      load();
+                      setUnreadCount((prev) => Math.max(prev - 1, 0));
+                    } catch {}
+                  }}
+                  style={styles.circleBtn}
+                >
+                  <Text style={styles.circleText}>✓</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setNotifications((prev) =>
+                      prev.filter((x) => x.id !== n.id)
+                    );
+                    setUnreadCount((prev) => Math.max(prev - 1, 0));
+                  }}
+                  style={styles.circleBtn}
+                >
+                  <Text style={styles.circleText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {(selectedTrip || popupLoading) && (
+        <TouchableWithoutFeedback onPress={closePopup}>
+          <View style={styles.overlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.popupContainer}>
+                {popupLoading ? (
+                  <ActivityIndicator size="large" color="white" />
+                ) : (
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                  >
+                    <TravelCard
+                      {...selectedTrip}
+                      embeddedMode={true}
+                      tripId={selectedTrip?.tripId}
+                      creatorId={selectedTrip?.creatorId}
+                      notifType={selectedTrip?.notifType}
+                      interestRequestId={selectedTrip?.interestRequestId}
+                      // ⭐ ADD THESE 3 LINES
+                      senderId={selectedTrip?.senderId}
+                      senderName={selectedTrip?.senderName}
+                      senderPhoto={selectedTrip?.senderPhoto}
+                    />
+                  </ScrollView>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#061237" },
+  scrollContent: { paddingTop: 40, paddingHorizontal: 18, paddingBottom: 120 },
+
+  bubble: {
+    backgroundColor: "#020d2d",
+    padding: 18,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  avatar: { width: 50, height: 50, borderRadius: 28, marginRight: 12 },
+  name: { color: "white", fontSize: 18, fontWeight: "600" },
+
+  message: { color: "#d7d9e8", fontSize: 16, marginBottom: 16, lineHeight: 22 },
+
+  buttonsRowCircle: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 14,
+    marginTop: 8,
+  },
+  circleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  circleText: {
+    color: "#061237",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginTop: -2,
+  },
+
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
+  popupContainer: {
+    width: "90%",
+    maxHeight: "85%",
+    backgroundColor: "transparent",
+  },
+});
+
 
 
 import {
@@ -3010,7 +2908,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import SuccessMessageBox from "../common/SuccessMessageBox";
 import { GOOGLE_API_KEY } from "@env";
 import BASE_URL from "../config/api";
-import * as ImagePicker from "expo-image-picker"; // ✅ ADDED
+import * as ImagePicker from "expo-image-picker";
 
 let fromTimeout;
 let toTimeout;
@@ -3025,23 +2923,22 @@ const PostScreen = () => {
   const [to, setTo] = useState("");
   const [fromSuggestions, setFromSuggestions] = useState([]);
   const [toSuggestions, setToSuggestions] = useState([]);
+
+  const [photoLocationSuggestions, setPhotoLocationSuggestions] = useState([]);
+
   const [date, setDate] = useState("");
   const [seatsAvailable, setSeatsAvailable] = useState("");
   const [description, setDescription] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
+
   const [location, setLocation] = useState("");
-  // -----------------------------------------------------
-  // NEW: Selected photo state
-  // -----------------------------------------------------
   const [photo, setPhoto] = useState(null);
 
-  // -----------------------------------------------------
-  // NEW: Image picker function
-  // -----------------------------------------------------
-
+  // CLOUDINARY
   const CLOUD_NAME = "del5ajmby";
   const UPLOAD_PRESET = "profile_preset";
 
@@ -3082,7 +2979,9 @@ const PostScreen = () => {
   const handlePhotoPost = async () => {
     const token = await AsyncStorage.getItem("token");
     if (!token) return;
+
     let uploadedPhotoUrl = null;
+
     if (photo) {
       uploadedPhotoUrl = await uploadToCloudinary(photo);
     }
@@ -3101,12 +3000,14 @@ const PostScreen = () => {
     });
   };
 
-  let timeouts = { from: null, to: null };
+  /** FETCH GOOGLE CITY SUGGESTIONS */
+  let timeouts = { from: null, to: null, photoLocation: null };
 
   const fetchSuggestions = async (query, type) => {
     if (!query || query.length < 2) {
       if (type === "from") setFromSuggestions([]);
-      else setToSuggestions([]);
+      else if (type === "to") setToSuggestions([]);
+      else if (type === "photoLocation") setPhotoLocationSuggestions([]);
       return;
     }
 
@@ -3120,23 +3021,20 @@ const PostScreen = () => {
         );
         const data = await res.json();
 
-        if (!data.predictions || data.predictions.length === 0) {
-          if (type === "from") setFromSuggestions([]);
-          else setToSuggestions([]);
-          return;
-        }
-
-        const simplified = data.predictions.map((item) => ({
-          id: item.place_id,
-          name: item.description,
-        }));
+        const simplified =
+          data?.predictions?.map((item) => ({
+            id: item.place_id,
+            name: item.description,
+          })) || [];
 
         if (type === "from") setFromSuggestions(simplified);
-        else setToSuggestions(simplified);
+        else if (type === "to") setToSuggestions(simplified);
+        else if (type === "photoLocation")
+          setPhotoLocationSuggestions(simplified);
       } catch (e) {
         console.error(`${type} fetch error:`, e);
       }
-    }, 100);
+    }, 120);
   };
 
   return (
@@ -3146,6 +3044,7 @@ const PostScreen = () => {
         <Image source={require("../assets/logo.png")} style={styles.logo} />
       </View>
 
+      {/* MAIN TABS */}
       <View style={styles.mainTabContainer}>
         <TouchableOpacity
           style={[
@@ -3182,15 +3081,17 @@ const PostScreen = () => {
         </TouchableOpacity>
       </View>
 
+      {/* INPUTS */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView
           style={styles.keyboardContainer}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
+          {/* TRIP MODE */}
           {selectedMain === "trip" && (
             <View style={styles.tripInfoWrapper}>
               <View style={styles.tripInfo}>
-                {/* trip UI EXACT as before… */}
+                {/* Trip type */}
                 <View style={styles.subTabInsideBox}>
                   <TouchableOpacity
                     style={[
@@ -3227,8 +3128,7 @@ const PostScreen = () => {
                   </TouchableOpacity>
                 </View>
 
-                {/* ALL your trip input fields kept untouched */}
-                {/* ... */}
+                {/* FROM */}
                 <View style={{ position: "relative", marginBottom: 10 }}>
                   <View style={styles.inputContainer}>
                     <Image
@@ -3267,7 +3167,7 @@ const PostScreen = () => {
                   )}
                 </View>
 
-                {/* second input */}
+                {/* TO */}
                 <View style={{ position: "relative", marginBottom: 10 }}>
                   <View style={styles.inputContainer}>
                     <Image
@@ -3306,7 +3206,7 @@ const PostScreen = () => {
                   )}
                 </View>
 
-                {/* date/seats */}
+                {/* DATE + SEATS */}
                 <View style={styles.dateAndSeatsContainer}>
                   <View style={styles.dateAndIcon}>
                     <TouchableOpacity onPress={() => setShowDatePicker(true)}>
@@ -3367,11 +3267,9 @@ const PostScreen = () => {
             </View>
           )}
 
+          {/* PHOTO MODE */}
           {selectedMain === "photo" && (
             <View style={styles.photoContainer}>
-              {/* -----------------------------------------------------
-                  ONLY CHANGE: Add onPress + image preview
-              ----------------------------------------------------- */}
               <TouchableOpacity style={styles.uploadBox} onPress={pickImage}>
                 {photo ? (
                   <Image
@@ -3392,13 +3290,37 @@ const PostScreen = () => {
                 )}
               </TouchableOpacity>
 
-              <TextInput
-                placeholder="Location"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                style={styles.textInputPhoto}
-                value={location}
-                onChangeText={setLocation}
-              />
+              {/* LOCATION + DROPDOWN */}
+              <View style={{ position: "relative", marginBottom: 10 }}>
+                <TextInput
+                  placeholder="Location"
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  style={styles.textInputPhoto}
+                  value={location}
+                  onChangeText={(text) => {
+                    setLocation(text);
+                    fetchSuggestions(text, "photoLocation");
+                  }}
+                />
+
+                {photoLocationSuggestions.length > 0 && (
+                  <FlatList
+                    data={photoLocationSuggestions}
+                    keyExtractor={(item) => item.id}
+                    style={styles.photoDropdown}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setLocation(item.name);
+                          setPhotoLocationSuggestions([]);
+                        }}
+                      >
+                        <Text style={styles.dropdownText}>{item.name}</Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                )}
+              </View>
 
               <TextInput
                 placeholder="Description"
@@ -3430,6 +3352,7 @@ const PostScreen = () => {
           try {
             const token = await AsyncStorage.getItem("token");
             if (!token) return;
+
             const response = await fetch(`${BASE_URL}/post`, {
               method: "POST",
               headers: {
@@ -3445,10 +3368,12 @@ const PostScreen = () => {
                 type: tripType,
               }),
             });
+
             const data = await response.json();
             const messageText = Array.isArray(data.message)
               ? data.message[0]
               : data.message;
+
             if (response.ok) {
               setMessageType("success");
               setMessage(messageText);
@@ -3461,8 +3386,8 @@ const PostScreen = () => {
               setVisible(true);
               setTimeout(() => setVisible(false), 2000);
             }
-          } catch (error) {
-            console.error("❌ Fetch error:", error);
+          } catch (e) {
+            console.error("POST error:", e);
           }
         }}
       >
@@ -3476,465 +3401,387 @@ const PostScreen = () => {
 
 export default PostScreen;
 
-// src/screens/NotificationScreen.js
-import React, { useEffect, useState, useContext } from "react";
+
+
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  TouchableWithoutFeedback,
-  ActivityIndicator,
+  Image,
+  FlatList,
+  RefreshControl,
 } from "react-native";
+import styles from "../styles/ProfilePassengerView_styles";
+import PhotoGrid from "../common/PhotoGrid";
+import FullScreenImageViewer from "../common/FullScreenImageViewer";
+import Trip from "../common/Trip";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSocket, onSocketReady } from "../socket";
+import { useRoute, useFocusEffect } from "@react-navigation/native";
 import BASE_URL from "../config/api";
-import { NotificationContext } from "../context/NotificationContext";
-import TravelCard from "../common/TravelCard";
 
-export default function NotificationsScreen() {
-  const [notifications, setNotifications] = useState([]);
-  const { setUnreadCount } = useContext(NotificationContext);
+const ProfilePassengerView = () => {
+  const [activeTab, setActiveTab] = useState("Photos");
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
-  const [selectedTrip, setSelectedTrip] = useState(null);
-  const [popupLoading, setPopupLoading] = useState(false);
-  const [selectedNotif, setSelectedNotif] = useState(null); // store clicked notification
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
-    const token = await AsyncStorage.getItem("token");
+  const [isOwner, setIsOwner] = useState(false);
+  const [trips, setTrips] = useState([]);
+  const [photos, setPhotos] = useState([]);
+
+  const [name, setName] = useState("User");
+  const [bio, setBio] = useState("");
+  const [city, setCity] = useState("");
+  const [interests, setInterests] = useState("");
+  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [coverPhoto, setCoverPhoto] = useState(null);
+
+  const route = useRoute();
+  const passedUserId = route.params?.userId;
+
+  // -------------------------------------
+  // LOAD PROFILE (used by refresh + focus)
+  // -------------------------------------
+  const loadProfile = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/notifications`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch {
-      setNotifications([]);
-    }
-  };
+      setLoading(true);
 
-  const openTripPopup = async (notif) => {
-    if (!notif.trip_id) return;
-
-    setSelectedNotif(notif);
-    setPopupLoading(true);
-
-    try {
       const token = await AsyncStorage.getItem("token");
-      const res = await fetch(`${BASE_URL}/post/${notif.trip_id}`, {
+      if (!token) return;
+
+      const myId = parseInt(await AsyncStorage.getItem("userId"), 10);
+      const owner = !passedUserId || passedUserId === myId;
+      setIsOwner(owner);
+
+      const finalUserId = owner ? myId : passedUserId;
+
+      const url = owner
+        ? `${BASE_URL}/profile/me`
+        : `${BASE_URL}/profile/${passedUserId}`;
+
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const tripData = await res.json();
-      setSelectedTrip(tripData);
+
+      const data = await res.json();
+
+      setName(`${data.first_name} ${data.last_name}`);
+      setBio(data.bio || "");
+      setCity(data.city || "");
+      setInterests(data.interests || "");
+      setProfilePhoto(data.profile_photo || null);
+      setCoverPhoto(data.cover_photo || null);
+
+      if (owner) {
+        await AsyncStorage.setItem("profilePhoto", data.profile_photo || "");
+        await AsyncStorage.setItem("coverPhoto", data.cover_photo || "");
+      }
+
+      const tripsUrl = owner
+        ? `${BASE_URL}/post/my-trips`
+        : `${BASE_URL}/post/user/${finalUserId}`;
+
+      const tripsRes = await fetch(tripsUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setTrips(await tripsRes.json());
+
+      const photosRes = await fetch(`${BASE_URL}/post/photos/${finalUserId}`);
+      const photosData = await photosRes.json();
+      setPhotos(photosData);
     } catch (err) {
-      console.log("Popup load error:", err);
+      console.log("❌ Profile load error:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    setPopupLoading(false);
   };
 
-  const closePopup = () => {
-    setSelectedTrip(null);
-    setSelectedNotif(null);
+  // --------------------
+  // FOCUS RE-FETCH FIX
+  // --------------------
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [passedUserId])
+  );
+
+  // --------------------
+  // PULL TO REFRESH FIX
+  // --------------------
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadProfile();
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  const openImage = (src) => {
+    setSelectedImage(src);
+    setIsFullScreen(true);
+  };
 
-  useEffect(() => {
-    onSocketReady(() => {
-      const socket = getSocket();
-      if (!socket) return;
+  const closeImage = () => {
+    setIsFullScreen(false);
+    setSelectedImage(null);
+  };
 
-      socket.on("new_notification", () => load());
-      socket.on("notification_deleted", () => load());
-    });
-
-    return () => {
-      const socket = getSocket();
-      socket?.off("new_notification");
-      socket?.off("notification_deleted");
-    };
-  }, []);
-
-  if (!notifications || notifications.length === 0) {
-    return (
-      <View style={[styles.centered, { backgroundColor: "#061237" }]}>
-        <Text style={{ color: "white", fontSize: 18 }}>
-          No notifications yet
-        </Text>
-      </View>
-    );
+  if (loading) {
+    return <View style={{ flex: 1, backgroundColor: "#051636" }} />;
   }
+
+  const coverSource = coverPhoto
+    ? { uri: coverPhoto }
+    : require("../assets/profile-picture2.jpeg");
+
+  const profileSource = profilePhoto
+    ? { uri: profilePhoto }
+    : require("../assets/profile-picture.jpeg");
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {notifications.map((n, i) => (
-          <TouchableOpacity
-            key={n.id || i}
-            style={styles.bubble}
-            onPress={() => openTripPopup(n)}
-          >
-            <View style={styles.headerRow}>
-              <Image
-                source={{
-                  uri: n.sender_photo || "https://i.stack.imgur.com/l60Hf.png",
-                }}
-                style={styles.avatar}
-              />
-              <Text style={styles.name}>{n.sender_name}</Text>
+      <FlatList
+        data={[]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListHeaderComponent={
+          <View>
+            <View style={styles.headerSection}>
+              <TouchableOpacity
+                style={styles.coverPhoto}
+                onPress={() => openImage(coverSource)}
+              >
+                <Image source={coverSource} style={styles.coverPhotoImage} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.profilePicture}
+                onPress={() => openImage(profileSource)}
+              >
+                <Image source={profileSource} style={styles.profileImage} />
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.message}>{n.message}</Text>
+            <View style={styles.nameSection}>
+              <Text style={styles.name}>{name}</Text>
 
-            {n.type !== "interest_accepted" && (
-              <View style={styles.buttonsRow}>
-                <TouchableOpacity
-                  style={[styles.button, styles.acceptButton]}
-                  onPress={async () => {
-                    const token = await AsyncStorage.getItem("token");
-                    try {
-                      await fetch(
-                        `${BASE_URL}/interest_requests/${n.interest_request_id}/accept`,
-                        {
-                          method: "PATCH",
-                          headers: {
-                            "Content-Type": "application/json",
-                            Authorization: `Bearer ${token}`,
-                          },
-                        }
-                      );
-                      load();
-                      setUnreadCount((prev) => Math.max(prev - 1, 0));
-                    } catch {}
-                  }}
-                >
-                  <Text style={styles.buttonText}>Yes</Text>
+              {isOwner && (
+                <TouchableOpacity style={styles.editPenContainer}>
+                  <Image
+                    source={require("../assets/editPen.png")}
+                    resizeMode="contain"
+                    style={styles.editPen}
+                  />
                 </TouchableOpacity>
+              )}
+            </View>
 
-                <TouchableOpacity
-                  style={[styles.button, styles.rejectButton]}
-                  onPress={() => {
-                    setNotifications((prev) =>
-                      prev.filter((x) => x.id !== n.id)
-                    );
-                    setUnreadCount((prev) => Math.max(prev - 1, 0));
-                  }}
-                >
-                  <Text style={styles.buttonText}>No</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+            <View style={styles.aboutSection}>
+              {city ? (
+                <Text style={styles.aboutSectionText}>{city}</Text>
+              ) : null}
+              {bio ? <Text style={styles.aboutSectionText}>{bio}</Text> : null}
+              {interests ? (
+                <Text style={styles.aboutSectionText}>{interests}</Text>
+              ) : null}
+            </View>
 
-      {(selectedTrip || popupLoading) && (
-        <TouchableWithoutFeedback onPress={closePopup}>
-          <View style={styles.overlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.popupContainer}>
-                {popupLoading ? (
-                  <ActivityIndicator size="large" color="white" />
-                ) : (
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 20 }}
+            <View style={styles.headerTabsRow}>
+              <View style={styles.tabsContainer}>
+                <TouchableOpacity onPress={() => setActiveTab("Photos")}>
+                  <Text
+                    style={[
+                      styles.headerText,
+                      activeTab === "Photos" && styles.activeTabText,
+                    ]}
                   >
-                    <TravelCard
-                      {...selectedTrip}
-                      embeddedMode={true}
-                      notifType={selectedNotif?.type}
-                      interestRequestId={selectedNotif?.interest_request_id}
-                    />
-                  </ScrollView>
+                    Photos
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => setActiveTab("Trips")}>
+                  <Text
+                    style={[
+                      styles.headerText,
+                      activeTab === "Trips" && styles.activeTabText,
+                    ]}
+                  >
+                    Trips
+                  </Text>
+                </TouchableOpacity>
+
+                {isOwner && (
+                  <TouchableOpacity onPress={() => setActiveTab("Myfriends")}>
+                    <Text
+                      style={[
+                        styles.headerText,
+                        activeTab === "Myfriends" && styles.activeTabText,
+                      ]}
+                    >
+                      Myfriends
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </View>
-            </TouchableWithoutFeedback>
+            </View>
+
+            {activeTab === "Photos" && (
+              <View style={{ alignItems: "center", marginTop: 20 }}>
+                <PhotoGrid photos={photos} />
+              </View>
+            )}
+
+            {activeTab === "Trips" && (
+              <FlatList
+                data={trips}
+                keyExtractor={(i) => i.id.toString()}
+                renderItem={({ item }) => (
+                  <Trip
+                    from={item.origin}
+                    to={item.destination}
+                    date={item.trip_date}
+                    seatsAvailable={item.available_seats}
+                    description={item.description}
+                    tripType={item.type}
+                    firstName={item.first_name}
+                  />
+                )}
+                scrollEnabled={false}
+              />
+            )}
           </View>
-        </TouchableWithoutFeedback>
+        }
+        contentContainerStyle={styles.scrollContent}
+      />
+
+      {isFullScreen && selectedImage && (
+        <FullScreenImageViewer source={selectedImage} onClose={closeImage} />
       )}
     </View>
   );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#061237" },
-  scrollContent: { paddingTop: 40, paddingHorizontal: 18, paddingBottom: 120 },
-  bubble: {
-    backgroundColor: "#020d2d",
-    padding: 18,
-    borderRadius: 20,
-    marginBottom: 20,
-  },
-  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  avatar: { width: 50, height: 50, borderRadius: 28, marginRight: 12 },
-  name: { color: "white", fontSize: 18, fontWeight: "600" },
-  message: { color: "#d7d9e8", fontSize: 16, marginBottom: 16, lineHeight: 22 },
-  buttonsRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 8,
-    gap: 12,
-  },
-  button: {
-    paddingVertical: 8,
-    paddingHorizontal: 22,
-    borderRadius: 12,
-    backgroundColor: "white",
-  },
-  acceptButton: { backgroundColor: "white" },
-  rejectButton: { backgroundColor: "white" },
-  buttonText: { color: "#061237", fontSize: 15, fontWeight: "700" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 10,
-  },
-  popupContainer: {
-    width: "90%",
-    maxHeight: "85%",
-    backgroundColor: "transparent",
-  },
-});
-
-
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  RefreshControl,
-  TextInput,
-  TouchableWithoutFeedback,
-  Keyboard,
-} from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import TravelCard from "../common/TravelCard";
-import PhotoCard from "../common/PhotoCard";
-import styles from "../styles/HomeScreen_styles";
-import * as Location from "expo-location";
-import BASE_URL from "../config/api";
-import { getSocket, onSocketReady } from "../socket";
-
-const HomeScreen = () => {
-  const [trips, setTrips] = useState([]);
-  const [photos, setPhotos] = useState([]);
-  const [search, setSearch] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
-  const [userLat, setUserLat] = useState(null);
-  const [userLng, setUserLng] = useState(null);
-
-  // --------------------------
-  // FETCH TRIPS
-  // --------------------------
-  const fetchTrips = async (lat, lng) => {
-    if (!lat || !lng) return;
-
-    try {
-      const response = await fetch(
-        `${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`
-      );
-      const data = await response.json();
-      setTrips(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("❌ Fetch error (trips):", error);
-      setTrips([]);
-    }
-
-    setRefreshing(false);
-  };
-
-  // --------------------------
-  // FETCH PHOTOS (FIXED)
-  // --------------------------
-  const fetchPhotos = async () => {
-    try {
-      const response = await fetch(`${BASE_URL}/post/photos`);
-
-      console.log("STATUS:", response.status);
-      console.log("HEADERS:", response.headers.get("content-type"));
-
-      const data = await response.json();
-
-      console.log("PHOTOS RAW DATA:", data);
-      console.log(
-        "PHOTOS LENGTH:",
-        Array.isArray(data) ? data.length : "NOT ARRAY"
-      );
-
-      setPhotos(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("❌ Fetch error (photos):", error);
-      setPhotos([]);
-    }
-  };
-
-  // --------------------------
-  // INITIAL LOAD
-  // --------------------------
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-
-      const current_location = await Location.getCurrentPositionAsync({});
-      const lat = current_location.coords.latitude;
-      const lng = current_location.coords.longitude;
-
-      setUserLat(lat);
-      setUserLng(lng);
-
-      await fetchTrips(lat, lng);
-      await fetchPhotos();
-    })();
-  }, []);
-
-  // --------------------------
-  // SOCKET REFRESH
-  // --------------------------
-  useEffect(() => {
-    onSocketReady(() => {
-      const socket = getSocket();
-      if (!socket) return;
-
-      const handler = () => {
-        if (userLat && userLng) fetchTrips(userLat, userLng);
-        fetchPhotos();
-      };
-
-      socket.on("new_notification", handler);
-
-      return () => socket.off("new_notification", handler);
-    });
-  }, [userLat, userLng]);
-
-  // --------------------------
-  // SAFETY WRAPPERS
-  // --------------------------
-  const safeTrips = Array.isArray(trips) ? trips : [];
-  const safePhotos = Array.isArray(photos) ? photos : [];
-
-  // --------------------------
-  // BUILD FEED
-  // --------------------------
-  const feed = [
-    ...safeTrips.map((t) => ({ type: "trip", data: t })),
-    ...safePhotos.map((p) => ({ type: "photo", data: p })),
-  ].sort((a, b) => {
-    const aDate =
-      a.type === "trip"
-        ? new Date(a.data.trip_date)
-        : new Date(a.data.created_at);
-
-    const bDate =
-      b.type === "trip"
-        ? new Date(b.data.trip_date)
-        : new Date(b.data.created_at);
-
-    return bDate - aDate;
-  });
-
-  // --------------------------
-  // SEARCH FILTER
-  // --------------------------
-  const filteredFeed = search.trim()
-    ? feed.filter(
-        (item) =>
-          item.type === "trip" &&
-          `${item.data.origin} ${item.data.destination}`
-            .toLowerCase()
-            .includes(search.toLowerCase())
-      )
-    : feed;
-
-  // --------------------------
-  // RENDER
-  // --------------------------
-  return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <FlashList
-          data={filteredFeed}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                if (userLat && userLng) fetchTrips(userLat, userLng);
-                fetchPhotos();
-              }}
-            />
-          }
-          ListHeaderComponent={
-            <View style={styles.headerContainer}>
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search trips..."
-                placeholderTextColor="#9bb0d4"
-                style={styles.searchBar}
-              />
-            </View>
-          }
-          renderItem={({ item }) => {
-            if (item.type === "trip") {
-              const t = item.data;
-              return (
-                <TravelCard
-                  from={t.origin}
-                  to={t.destination}
-                  date={t.trip_date}
-                  seatsAvailable={t.available_seats}
-                  description={t.description}
-                  tripType={t.type}
-                  firstName={t.first_name}
-                  distance={t.distance}
-                  creatorId={t.creator_id}
-                  tripId={t.id}
-                  profilePhoto={t.profile_photo}
-                />
-              );
-            }
-
-            if (item.type === "photo") {
-              const p = item.data;
-              return (
-                <PhotoCard
-                  userName={p.first_name}
-                  caption={p.description}
-                  photos={[p.photo_url]}
-                  profilePhoto={p.profile_photo}
-                />
-              );
-            }
-
-            return null;
-          }}
-          estimatedItemSize={400}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        />
-      </View>
-    </TouchableWithoutFeedback>
-  );
 };
 
-export default HomeScreen;
+export default ProfilePassengerView;
+
+
+
+
+// src/socket/index.js
+import { io } from "socket.io-client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import BASE_URL from "../config/api";
+
+let socket = null;
+let readyCallbacks = [];
+
+/**
+ * Track which chat the user is currently viewing.
+ * null = user is NOT inside a ChatScreen
+ */
+export let activeChatId = null;
+export const setActiveChat = (id) => {
+  activeChatId = id;
+};
+
+let notifyCallbacks = [];
+
+/**
+ * Screens (MessagesScreen, tab badges, etc.) can subscribe
+ * to "message arrived for other conversations"
+ */
+export const onNotify = (cb) => {
+  notifyCallbacks.push(cb);
+};
+
+export const connectSocket = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+
+    if (socket && socket.connected) return socket;
+
+    if (socket) {
+      try {
+        socket.removeAllListeners();
+        socket.disconnect();
+      } catch {}
+      socket = null;
+    }
+
+    socket = io(BASE_URL, {
+      path: "/socket.io",
+      transports: ["websocket"],
+      forceNew: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    socket.on("connect", async () => {
+      const userId = Number(await AsyncStorage.getItem("userId"));
+      if (userId) {
+        socket.emit("chat_identify", { userId });
+      }
+
+      try {
+        readyCallbacks.forEach((cb) => cb());
+      } finally {
+        readyCallbacks = [];
+      }
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("APP SOCKET DISCONNECTED:", reason);
+    });
+
+    // -------- NEW: notification handler --------
+    socket.on("newMessage", (msg) => {
+      // If the message belongs to another conversation → notify
+      if (msg.conversationId !== activeChatId) {
+        notifyCallbacks.forEach((fn) => fn(msg));
+      }
+    });
+
+    return socket;
+  } catch (e) {
+    console.log("[socket] connect error", e);
+    throw e;
+  }
+};
+
+export const getSocket = () => socket;
+
+export const onSocketReady = (callback) => {
+  if (socket && socket.connected) {
+    callback();
+    return;
+  }
+
+  readyCallbacks.push(callback);
+
+  if (!socket) {
+    connectSocket().catch(() => {});
+  }
+};
+
+export const subscribe = (event, callback) => {
+  if (!socket) return;
+  socket.on(event, callback);
+};
+
+export const disconnectSocket = () => {
+  if (!socket) return;
+  try {
+    socket.removeAllListeners();
+    socket.disconnect();
+  } catch {}
+  socket = null;
+};
+
+
 
 // App.js
 import React, { useEffect } from "react";
@@ -3952,9 +3799,11 @@ import HomeScreen from "./src/screens/HomeScreen";
 import BottomNavigator from "./src/common/BottomNavigator";
 import ChatTestScreen from "./src/screens/ChatTestScreen";
 import ProfilePassengerView from "./src/screens/ProfilePassengerView";
+import ChatScreen from "./src/screens/ChatScreen";
 
 import { connectSocket } from "./src/socket";
 import { NotificationProvider } from "./src/context/NotificationContext";
+import { MessageProvider } from "./src/context/MessageContext"; // 🔥 NEW
 
 const Stack = createNativeStackNavigator();
 
@@ -3967,36 +3816,38 @@ export default function App() {
   return (
     <SafeAreaProvider style={styles.container}>
       <NotificationProvider>
-        <NavigationContainer>
-          <StatusBar style="light" />
+        <MessageProvider>
+          <NavigationContainer>
+            <StatusBar style="light" />
 
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Landing" component={LandingScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="ChatTest" component={ChatTestScreen} />
-            <Stack.Screen
-              name="CompleteProfileScreen"
-              component={CompleteProfileScreen}
-            />
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="Profile" component={ProfilePassengerView} />
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Landing" component={LandingScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Chat" component={ChatScreen} />
+              <Stack.Screen
+                name="CompleteProfileScreen"
+                component={CompleteProfileScreen}
+              />
+              <Stack.Screen name="Home" component={HomeScreen} />
+              <Stack.Screen name="Profile" component={ProfilePassengerView} />
 
-            <Stack.Screen
-              name="BottomNavigator"
-              options={{ headerShown: false }}
-            >
-              {() => (
-                <SafeAreaView
-                  style={{ flex: 1, backgroundColor: "#061237" }}
-                  edges={[]}
-                >
-                  <BottomNavigator />
-                </SafeAreaView>
-              )}
-            </Stack.Screen>
-          </Stack.Navigator>
-        </NavigationContainer>
+              <Stack.Screen
+                name="BottomNavigator"
+                options={{ headerShown: false }}
+              >
+                {() => (
+                  <SafeAreaView
+                    style={{ flex: 1, backgroundColor: "#061237" }}
+                    edges={[]}
+                  >
+                    <BottomNavigator />
+                  </SafeAreaView>
+                )}
+              </Stack.Screen>
+            </Stack.Navigator>
+          </NavigationContainer>
+        </MessageProvider>
       </NotificationProvider>
     </SafeAreaProvider>
   );
@@ -4012,4 +3863,13 @@ const styles = StyleSheet.create({
 
 
 
+There is some bugs we need to fix them one by one. 
+1) The notifications badge is working perfectly fine but there is only one small problem, when I reload the application and log in again, the badge shows the same number. That number is literally the number of notifications that exist in the notifications screen. So even if I open all the notifications and there is no unread notifications, When I reload the app, I see the badge again even though there is no actual new notifications. 
+2) inside the notifications screen, The "send message" button does not exists like it used to in previous design. Look at the other screenshot. 
+3) inside the notifications screen when I click the profile picture on the travel card, instead of opening the profile of that person(the profile photo owner) it openes my own profile instead. 
 
+RULES: 
+1) ALWAYS, ALWAYS, ALWAYS PROVIDE FULL FILE. I don't care about your explanations, If there is a file that need changes, provide that full file with the new changes. don't show me the snippet that needs to be changed and then ask me if I need full file. ALWAYS PROVIDE FILE FROM THE BEGINNING. DON'T MAKE ME REPEAT THIS INSTRUCTION OVER AND OVER AGAIN 
+2) keep your answers short and very minimal. ALWAYS KEEP THEM SHORT ALWAYS ALWAYS. DON'T MAKE ME REPEAT THIS INSTRUCTION OVER AND OVER AGAIN 
+3) don't fuck up my code or my app. If there is a file you don't have or need ask me. I'll upload it. If you're not sure about something ask. 
+4) If there is debugging steps, say them one by one. Say the first one and wait till I paste the output. Let's start with fixing the first problem. Again if you need other information let me know. Like database tables or anything else. If you're going to modify a file and you need the current file let me know. 

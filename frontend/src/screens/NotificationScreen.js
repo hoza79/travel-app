@@ -1,4 +1,3 @@
-// src/screens/NotificationScreen.js
 import React, { useEffect, useState, useContext } from "react";
 import {
   View,
@@ -52,7 +51,6 @@ export default function NotificationsScreen() {
       });
       const tripData = await res.json();
 
-      // ⭐ ADD THESE 3 FIELDS
       const senderId = notification.sender_id;
       const senderName = notification.sender_name;
       const senderPhoto = notification.sender_photo;
@@ -63,8 +61,6 @@ export default function NotificationsScreen() {
         creatorId: tripData.creator_id,
         interestRequestId: notification.interest_request_id,
         notifType: notification.type,
-
-        // ⭐ REQUIRED FIX FOR CORRECT CHAT TARGET
         senderId,
         senderName,
         senderPhoto,
@@ -98,10 +94,22 @@ export default function NotificationsScreen() {
     };
   }, []);
 
+  // ⭐ Mark read on focus
   useEffect(() => {
-    if (isFocused) {
+    if (!isFocused) return;
+
+    (async () => {
+      const token = await AsyncStorage.getItem("token");
+      try {
+        await fetch(`${BASE_URL}/notifications/mark-read`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {}
+
       setUnreadCount(0);
-    }
+      load();
+    })();
   }, [isFocused]);
 
   if (!notifications || notifications.length === 0) {
@@ -197,10 +205,14 @@ export default function NotificationsScreen() {
                       {...selectedTrip}
                       embeddedMode={true}
                       tripId={selectedTrip?.tripId}
-                      creatorId={selectedTrip?.creatorId}
+                      // ⭐ FIXED LINE: Always correct owner ID for chat
+                      creatorId={
+                        selectedTrip?.notifType === "interest_accepted"
+                          ? selectedTrip?.senderId // owner accepted → sender is owner
+                          : selectedTrip?.creatorId // feed data
+                      }
                       notifType={selectedTrip?.notifType}
                       interestRequestId={selectedTrip?.interestRequestId}
-                      // ⭐ ADD THESE 3 LINES
                       senderId={selectedTrip?.senderId}
                       senderName={selectedTrip?.senderName}
                       senderPhoto={selectedTrip?.senderPhoto}
@@ -239,6 +251,7 @@ const styles = StyleSheet.create({
     gap: 14,
     marginTop: 8,
   },
+
   circleBtn: {
     width: 42,
     height: 42,
@@ -247,6 +260,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
   circleText: {
     color: "#061237",
     fontSize: 22,
@@ -267,6 +281,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
   },
+
   popupContainer: {
     width: "90%",
     maxHeight: "85%",
