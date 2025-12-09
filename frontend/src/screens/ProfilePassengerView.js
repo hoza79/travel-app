@@ -10,7 +10,7 @@ import {
 import styles from "../styles/ProfilePassengerView_styles";
 import PhotoGrid from "../common/PhotoGrid";
 import FullScreenImageViewer from "../common/FullScreenImageViewer";
-import TravelCard from "../common/TravelCard"; // ⭐ NEW
+import TravelCard from "../common/TravelCard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRoute, useFocusEffect } from "@react-navigation/native";
 import BASE_URL from "../config/api";
@@ -23,7 +23,6 @@ const ProfilePassengerView = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [isOwner, setIsOwner] = useState(false);
   const [trips, setTrips] = useState([]);
   const [photos, setPhotos] = useState([]);
 
@@ -40,21 +39,13 @@ const ProfilePassengerView = () => {
   const loadProfile = async () => {
     try {
       setLoading(true);
-
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
-      const myId = parseInt(await AsyncStorage.getItem("userId"), 10);
-      const owner = !passedUserId || passedUserId === myId;
-      setIsOwner(owner);
+      const finalUserId = passedUserId;
 
-      const finalUserId = owner ? myId : passedUserId;
-
-      const url = owner
-        ? `${BASE_URL}/profile/me`
-        : `${BASE_URL}/profile/${passedUserId}`;
-
-      const res = await fetch(url, {
+      // LOAD USER PROFILE
+      const res = await fetch(`${BASE_URL}/profile/${finalUserId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -67,21 +58,15 @@ const ProfilePassengerView = () => {
       setProfilePhoto(data.profile_photo || null);
       setCoverPhoto(data.cover_photo || null);
 
-      if (owner) {
-        await AsyncStorage.setItem("profilePhoto", data.profile_photo || "");
-        await AsyncStorage.setItem("coverPhoto", data.cover_photo || "");
-      }
-
-      const tripsUrl = owner
-        ? `${BASE_URL}/post/my-trips`
-        : `${BASE_URL}/post/user/${finalUserId}`;
-
-      const tripsRes = await fetch(tripsUrl, {
+      // LOAD TRIPS
+      const tripsRes = await fetch(`${BASE_URL}/post/user/${finalUserId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setTrips(await tripsRes.json());
+      const tripsData = await tripsRes.json();
+      setTrips(tripsData);
 
+      // LOAD PHOTOS
       const photosRes = await fetch(`${BASE_URL}/post/photos/${finalUserId}`);
       const photosData = await photosRes.json();
       setPhotos(photosData);
@@ -135,6 +120,7 @@ const ProfilePassengerView = () => {
         }
         ListHeaderComponent={
           <View>
+            {/* HEADER IMAGES */}
             <View style={styles.headerSection}>
               <TouchableOpacity
                 style={styles.coverPhoto}
@@ -151,20 +137,12 @@ const ProfilePassengerView = () => {
               </TouchableOpacity>
             </View>
 
+            {/* NAME */}
             <View style={styles.nameSection}>
               <Text style={styles.name}>{name}</Text>
-
-              {isOwner && (
-                <TouchableOpacity style={styles.editPenContainer}>
-                  <Image
-                    source={require("../assets/editPen.png")}
-                    resizeMode="contain"
-                    style={styles.editPen}
-                  />
-                </TouchableOpacity>
-              )}
             </View>
 
+            {/* ABOUT */}
             <View style={styles.aboutSection}>
               {city ? (
                 <Text style={styles.aboutSectionText}>{city}</Text>
@@ -175,6 +153,7 @@ const ProfilePassengerView = () => {
               ) : null}
             </View>
 
+            {/* HEADER TABS */}
             <View style={styles.headerTabsRow}>
               <View style={styles.tabsContainer}>
                 <TouchableOpacity onPress={() => setActiveTab("Photos")}>
@@ -198,30 +177,17 @@ const ProfilePassengerView = () => {
                     Trips
                   </Text>
                 </TouchableOpacity>
-
-                {isOwner && (
-                  <TouchableOpacity onPress={() => setActiveTab("Myfriends")}>
-                    <Text
-                      style={[
-                        styles.headerText,
-                        activeTab === "Myfriends" && styles.activeTabText,
-                      ]}
-                    >
-                      Myfriends
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
             </View>
 
-            {/* ⭐ PHOTOS TAB */}
+            {/* PHOTOS TAB */}
             {activeTab === "Photos" && (
               <View style={{ alignItems: "center", marginTop: 20 }}>
                 <PhotoGrid photos={photos} />
               </View>
             )}
 
-            {/* ⭐ TRIPS TAB — NOW USING TRAVELCARD */}
+            {/* TRIPS TAB */}
             {activeTab === "Trips" && (
               <FlatList
                 data={trips}
@@ -238,7 +204,7 @@ const ProfilePassengerView = () => {
                     creatorId={item.creator_id}
                     tripId={item.id}
                     profilePhoto={item.profile_photo}
-                    embeddedMode={false} // ⭐ still clickable & functional
+                    embeddedMode={false}
                   />
                 )}
                 scrollEnabled={false}

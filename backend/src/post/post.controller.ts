@@ -76,14 +76,23 @@ export class PostController {
     return this.postService.getPhotosByUser(Number(userId));
   }
 
-  // ---------- DELETE (must be BEFORE :id but AFTER static routes) ----------
+  // ---------- DELETE PHOTO (MUST BE BEFORE trip delete) ----------
+  @Delete('photo/:photoId')
+  deletePhoto(@Req() req, @Param('photoId') photoId: string) {
+    const userId = verifyToken(req);
+    const parsed = Number(photoId);
+    if (Number.isNaN(parsed)) throw new BadRequestException('Invalid photo id');
+    return this.postService.deletePhoto(parsed, userId);
+  }
+
+  // ---------- TRIP DELETE ----------
   @Delete(':id')
   delete(@Req() req, @Param('id') id: string) {
     const userId = verifyToken(req);
     const parsed = Number(id);
     if (Number.isNaN(parsed)) throw new BadRequestException('Invalid trip id');
 
-    return this.postService.delete(parsed, userId); // ✅ CORRECT
+    return this.postService.delete(parsed, userId);
   }
 
   // ---------- THIS MUST BE LAST ----------

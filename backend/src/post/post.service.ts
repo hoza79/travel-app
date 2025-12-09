@@ -10,15 +10,13 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { getCoordinates } from 'src/utils/geocoding.utils';
 import { CreatePhotoDto } from './dto/create-photo.dto';
-
-// ⭐ Add this import so we can broadcast trip deletion
 import { NotificationsGateway } from 'src/notifications/notifications.gateway';
 
 @Injectable()
 export class PostService {
   constructor(
     @Inject('DATABASE_CONNECTION') private readonly db: Pool,
-    private readonly notificationsGateway: NotificationsGateway, // ⭐ inject gateway
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async create(createPostDto: CreatePostDto, userId: number) {
@@ -187,15 +185,11 @@ export class PostService {
     }
   }
 
-  // ---------------------------------------------------
-  // ⭐ NEW: DELETE TRIP (with ownership check + broadcast)
-  // ---------------------------------------------------
-  // ---------------------------------------------------
-  // DELETE TRIP (safe delete with FK cleanup)
-  // ---------------------------------------------------
+  // ---------------------------------------------------------------------
+  // ⭐ DELETE TRIP
+  // ---------------------------------------------------------------------
   async delete(tripId: number, userId: number) {
     try {
-      // 1️⃣ Verify ownership
       const [rows]: any = await this.db.query(
         'SELECT creator_id FROM trips WHERE id = ? LIMIT 1',
         [tripId],
@@ -209,20 +203,16 @@ export class PostService {
         throw new ForbiddenException('You cannot delete this trip');
       }
 
-      // 2️⃣ DELETE all notifications linked to the trip
       await this.db.query('DELETE FROM notifications WHERE trip_id = ?', [
         tripId,
       ]);
 
-      // 3️⃣ DELETE interest requests linked to this trip
       await this.db.query('DELETE FROM interest_requests WHERE trip_id = ?', [
         tripId,
       ]);
 
-      // 4️⃣ Now delete the trip safely
       await this.db.query('DELETE FROM trips WHERE id = ?', [tripId]);
 
-      // 5️⃣ Broadcast real-time deletion
       this.notificationsGateway.sendTripDeleted(tripId);
 
       return { message: 'Trip deleted successfully' };
@@ -232,10 +222,9 @@ export class PostService {
     }
   }
 
-  // ---------------------------
-  // PHOTO SECTION
-  // ---------------------------
-
+  // ---------------------------------------------------------------------
+  // ⭐ CREATE PHOTO
+  // ---------------------------------------------------------------------
   async createPhoto(createPhotoDto: CreatePhotoDto, userId: number) {
     const { photo_url, location, description } = createPhotoDto;
 
@@ -266,12 +255,16 @@ export class PostService {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // ⭐ GET ALL PHOTOS (NOW RETURNS user_id)
+  // ---------------------------------------------------------------------
   async getAllPhotos(userLat?: number, userLng?: number) {
     try {
       if (!userLat || !userLng) {
         const [rows]: any = await this.db.query(
           `SELECT 
             photos.id,
+            photos.user_id,
             photos.photo_url,
             photos.location,
             photos.description,
@@ -288,6 +281,7 @@ export class PostService {
       const [rows]: any = await this.db.query(
         `SELECT 
             photos.id,
+            photos.user_id,
             photos.photo_url,
             photos.location,
             photos.description,
@@ -317,15 +311,54 @@ export class PostService {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // ⭐ GET USER PHOTOS (NOW RETURNS user_id)
+  // ---------------------------------------------------------------------
   async getPhotosByUser(userId: number) {
     try {
       const [data] = await this.db.query(
-        `SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC`,
+        `SELECT 
+           id,
+           user_id,
+           photo_url,
+           location,
+           description,
+           created_at
+         FROM photos 
+         WHERE user_id = ?
+         ORDER BY created_at DESC`,
         [userId],
       );
       return data;
     } catch (error) {
       console.error('❌ Database Error (getPhotosByUser):', error);
+      throw error;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // ⭐ DELETE PHOTO
+  // ---------------------------------------------------------------------
+  async deletePhoto(photoId: number, userId: number) {
+    try {
+      const [rows]: any = await this.db.query(
+        `SELECT user_id FROM photos WHERE id = ? LIMIT 1`,
+        [photoId],
+      );
+
+      if (!rows || rows.length === 0) {
+        throw new NotFoundException('Photo not found');
+      }
+
+      if (rows[0].user_id !== userId) {
+        throw new ForbiddenException('You cannot delete this photo');
+      }
+
+      await this.db.query(`DELETE FROM photos WHERE id = ?`, [photoId]);
+
+      return { message: 'Photo deleted successfully' };
+    } catch (error) {
+      console.error('❌ Database Error (deletePhoto):', error);
       throw error;
     }
   }

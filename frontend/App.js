@@ -13,17 +13,16 @@ import CompleteProfileScreen from "./src/screens/CompleteProfileScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import BottomNavigator from "./src/common/BottomNavigator";
 import ChatTestScreen from "./src/screens/ChatTestScreen";
-import ProfilePassengerView from "./src/screens/ProfilePassengerView";
+import ProfilePassengerView from "./src/screens/ProfilePassengerView"; // other people's profile
 import ChatScreen from "./src/screens/ChatScreen";
 
 import { connectSocket } from "./src/socket";
 import { NotificationProvider } from "./src/context/NotificationContext";
-import { MessageProvider } from "./src/context/MessageContext"; // 🔥 NEW
+import { MessageProvider } from "./src/context/MessageContext";
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  // 🔥 Connect socket ONE TIME here.
   useEffect(() => {
     connectSocket();
   }, []);
@@ -45,7 +44,12 @@ export default function App() {
                 component={CompleteProfileScreen}
               />
               <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="Profile" component={ProfilePassengerView} />
+
+              {/* ⭐ FIX: rename route so it does NOT conflict with tab "Profile" */}
+              <Stack.Screen
+                name="UserProfile"
+                component={ProfilePassengerView}
+              />
 
               <Stack.Screen
                 name="BottomNavigator"

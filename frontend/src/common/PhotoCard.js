@@ -1,10 +1,57 @@
-import React, { useState } from "react";
-import { View, Text, Image, TouchableOpacity, ScrollView } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
 import styles from "../styles/PhotoCard_styles";
 import FullScreenImageViewer from "./FullScreenImageViewer";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import BASE_URL from "../config/api";
 
-const PhotoCard = ({ userName, caption, photos = [], profilePhoto }) => {
+const PhotoCard = ({
+  userName,
+  caption,
+  photos = [],
+  profilePhoto,
+  id,
+  user_id,
+  onPhotoDeleted,
+}) => {
   const [fullscreenImage, setFullscreenImage] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const stored = await AsyncStorage.getItem("userId");
+      if (stored) setCurrentUserId(parseInt(stored, 10));
+    };
+    loadUser();
+  }, []);
+
+  const isOwner = currentUserId === user_id;
+
+  const handleDeletePhoto = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      await fetch(`${BASE_URL}/post/photo/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (onPhotoDeleted) onPhotoDeleted(id);
+    } catch (err) {
+      console.log("❌ Photo delete error:", err);
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -15,7 +62,7 @@ const PhotoCard = ({ userName, caption, photos = [], profilePhoto }) => {
         />
       )}
 
-      {/* Header */}
+      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.profilePicture}>
           <Image
@@ -29,13 +76,27 @@ const PhotoCard = ({ userName, caption, photos = [], profilePhoto }) => {
           />
         </View>
 
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.userName}>{userName}</Text>
           <Text style={styles.subText}>Shared a photo</Text>
         </View>
+
+        {/* DELETE BUTTON — OWNER ONLY */}
+        {isOwner && (
+          <TouchableOpacity
+            onPress={handleDeletePhoto}
+            style={styles.deleteButton}
+          >
+            {isDeleting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.deleteText}>Delete</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* FULL-WIDTH PHOTO */}
+      {/* PHOTO */}
       {photos.map((photo, index) => (
         <TouchableOpacity
           key={index}
@@ -58,4 +119,5 @@ const PhotoCard = ({ userName, caption, photos = [], profilePhoto }) => {
     </View>
   );
 };
+
 export default PhotoCard;

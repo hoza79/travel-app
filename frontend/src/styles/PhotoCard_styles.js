@@ -49,9 +49,20 @@ export default StyleSheet.create({
     fontSize: 14,
   },
 
-  photoScroll: {
-    marginBottom: 15,
-    height: 190,
+  /** DELETE BUTTON **/
+  deleteButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  deleteText: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   photo: {
@@ -67,6 +78,7 @@ export default StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
     fontSize: 15,
     lineHeight: 22,
+    marginTop: 10,
   },
 
   footer: {

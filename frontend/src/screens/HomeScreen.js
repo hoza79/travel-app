@@ -23,17 +23,19 @@ const HomeScreen = () => {
   const [userLat, setUserLat] = useState(null);
   const [userLng, setUserLng] = useState(null);
 
-  // ----------------------------------------------------
-  // DELETE HANDLER (fixes the big empty space)
-  // ----------------------------------------------------
+  // TRIP DELETE HANDLER
   const handleTripDeleted = (deletedId) => {
     setItems((prev) => prev.filter((item) => item.id !== deletedId));
     setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
   };
 
-  // ----------------------------------------------------
-  // FETCH ALL TRIPS + PHOTOS
-  // ----------------------------------------------------
+  // PHOTO DELETE HANDLER
+  const handlePhotoDeleted = (deletedId) => {
+    setItems((prev) => prev.filter((item) => item.id !== deletedId));
+    setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
+  };
+
+  // FETCH NEARBY TRIPS + PHOTOS
   const fetchAll = async (lat, lng) => {
     try {
       const [tripsRes, photosRes] = await Promise.all([
@@ -54,6 +56,7 @@ const HomeScreen = () => {
       merged.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
       setItems(merged);
+      setFilteredItems(merged);
     } catch (e) {
       console.log("❌ Fetch error:", e);
     } finally {
@@ -61,9 +64,7 @@ const HomeScreen = () => {
     }
   };
 
-  // ----------------------------------------------------
   // LOAD LOCATION + FETCH
-  // ----------------------------------------------------
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -80,9 +81,7 @@ const HomeScreen = () => {
     })();
   }, []);
 
-  // ----------------------------------------------------
-  // SOCKET LISTENERS
-  // ----------------------------------------------------
+  // SOCKET EVENTS
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -93,20 +92,22 @@ const HomeScreen = () => {
       });
 
       socket.on("trip_deleted", ({ tripId }) => {
-        console.log("🔥 Trip deleted event received:", tripId);
         handleTripDeleted(tripId);
+      });
+
+      socket.on("photo_deleted", ({ photoId }) => {
+        handlePhotoDeleted(photoId);
       });
 
       return () => {
         socket.off("new_notification");
         socket.off("trip_deleted");
+        socket.off("photo_deleted");
       };
     });
   }, [userLat, userLng]);
 
-  // ----------------------------------------------------
   // SEARCH FILTER
-  // ----------------------------------------------------
   useEffect(() => {
     if (!search.trim()) {
       setFilteredItems(items);
@@ -124,9 +125,6 @@ const HomeScreen = () => {
     setFilteredItems(results);
   }, [search, items]);
 
-  // ----------------------------------------------------
-  // RENDER
-  // ----------------------------------------------------
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
@@ -158,6 +156,9 @@ const HomeScreen = () => {
                   caption={item.description}
                   photos={[item.photo_url]}
                   profilePhoto={item.profile_photo}
+                  id={item.id} // ✅ MATCHES YOUR PHOTOCARD
+                  user_id={item.user_id} // ✅ MATCHES YOUR PHOTOCARD
+                  onPhotoDeleted={handlePhotoDeleted}
                 />
               );
             }
@@ -178,7 +179,7 @@ const HomeScreen = () => {
                   creatorId={item.creator_id}
                   tripId={item.id}
                   profilePhoto={item.profile_photo}
-                  onTripDeleted={handleTripDeleted} // ⭐ FIX ADDED
+                  onTripDeleted={handleTripDeleted}
                 />
               );
             }

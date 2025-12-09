@@ -1,4 +1,3 @@
-// src/navigation/BottomNavigator.js
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React, { useContext } from "react";
 import { Image, View, Text } from "react-native";
@@ -6,7 +5,7 @@ import { Image, View, Text } from "react-native";
 import HomeScreen from "../screens/HomeScreen";
 import MessagesScreen from "../screens/MessagesScreen";
 import PostScreen from "../screens/PostScreen";
-import ProfilePassengerView from "../screens/ProfilePassengerView";
+import ProfileSelfScreen from "../screens/ProfileSelfScreen"; // ⭐ CHANGED
 import NotificationsScreen from "../screens/NotificationScreen";
 
 import { NotificationContext } from "../context/NotificationContext";
@@ -177,7 +176,7 @@ const BottomNavigator = () => {
 
       <Tab.Screen
         name="Profile"
-        component={ProfilePassengerView}
+        component={ProfileSelfScreen} // ⭐ FIX — always YOUR profile
         options={{
           tabBarIcon: ({ focused }) => (
             <Image

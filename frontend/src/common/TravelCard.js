@@ -119,7 +119,6 @@ const TravelCard = ({
     loadStatus();
   }, [tripId]);
 
-  // ⭐ IMPORTANT: handle silent REJECTION instantly
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -127,7 +126,6 @@ const TravelCard = ({
 
       const handler = (notif) => {
         if (notif?.interestRequestId === interestRequestId) {
-          // Deleted request → FULL instantly
           setStatus("rejected");
           setIsFull(true);
         }
@@ -135,7 +133,6 @@ const TravelCard = ({
 
       socket.on("notification_deleted", handler);
 
-      // handle accepted event from owner
       socket.on("new_notification", (notif) => {
         try {
           if (notif?.trip_id !== tripId) return;
@@ -174,7 +171,6 @@ const TravelCard = ({
       });
 
       if (res.status === 400) {
-        // Trip is full
         setIsFull(true);
         setStatus("rejected");
         return;
@@ -259,7 +255,6 @@ const TravelCard = ({
     loadAvatar();
   }, [profilePhoto]);
 
-  // ⭐ NEW — FULL state based on rejection
   const isRejected = status === "rejected";
 
   const showFull =
@@ -293,8 +288,8 @@ const TravelCard = ({
         <View>
           <View style={styles.rowCenter}>
             <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("Profile", { userId: creatorId })
+              onPress={
+                () => navigation.navigate("UserProfile", { userId: creatorId }) // ⭐ ONLY CHANGE
               }
               style={styles.profilePicture}
             >
@@ -358,7 +353,6 @@ const TravelCard = ({
               {seatsAvailable} Seats available
             </Text>
 
-            {/* OWNER DELETE */}
             {isOwner && (
               <TouchableOpacity
                 onPress={handleDeleteTrip}
@@ -374,7 +368,6 @@ const TravelCard = ({
               </TouchableOpacity>
             )}
 
-            {/* ⭐ FULL BADGE FOR REQUESTER */}
             {showFull && (
               <View
                 style={{
@@ -393,7 +386,6 @@ const TravelCard = ({
               </View>
             )}
 
-            {/* ⭐ NORMAL BUTTONS */}
             {!embeddedMode && !isOwner && !showFull && (
               <TouchableOpacity
                 style={[
@@ -436,7 +428,6 @@ const TravelCard = ({
               </TouchableOpacity>
             )}
 
-            {/* EMBEDDED MODE for notifications */}
             {embeddedMode && notifType === "interest_request" && isOwner && (
               <View
                 style={{
