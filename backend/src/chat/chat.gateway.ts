@@ -23,9 +23,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private clients = new Map<number, string>();
 
-  // --------------------------------
-  // CONNECTIONS
-  // --------------------------------
   handleConnection(client: Socket) {
     console.log('Chat client connected:', client.id);
   }
@@ -41,9 +38,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // --------------------------------
-  // IDENTIFY USER
-  // --------------------------------
   @SubscribeMessage('chat_identify')
   identify(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
     const userId = Number(data?.userId);
@@ -53,9 +47,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { status: 'ok' };
   }
 
-  // --------------------------------
-  // SEND MESSAGE
-  // --------------------------------
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
@@ -72,6 +63,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       [conversationId, sender_id, receiver_id, message_text],
     );
 
+    // UNDELETE FOR BOTH USERS
+    await this.db.query(
+      `
+      DELETE FROM conversation_deleted
+      WHERE conversation_id = ?
+      AND user_id IN (?, ?)
+      `,
+      [conversationId, sender_id, receiver_id],
+    );
+
     const payload = {
       conversationId,
       sender_id,
@@ -80,31 +81,73 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       sent_at: new Date(),
     };
 
-    // EMIT MESSAGE TO RECEIVER + SENDER
+    // EMIT
     const receiverSocket = this.clients.get(receiver_id);
     if (receiverSocket) {
       this.server.to(receiverSocket).emit('newMessage', payload);
     }
     client.emit('newMessage', payload);
 
-    // -------------------------------------------
-    // FETCH CONVERSATION PREVIEW FOR SENDER
-    // -------------------------------------------
-    const [senderRows]: any = await this.db.query(
+    // -----------------------------------------
+    // FETCH DELETED_AT FOR BOTH USERS
+    // -----------------------------------------
+    const [[delSender]]: any = await this.db.query(
       `
+      SELECT deleted_at 
+      FROM conversation_deleted
+      WHERE user_id = ? AND conversation_id = ?
+      ORDER BY deleted_at DESC
+      LIMIT 1
+      `,
+      [sender_id, conversationId],
+    );
+
+    const [[delReceiver]]: any = await this.db.query(
+      `
+      SELECT deleted_at 
+      FROM conversation_deleted
+      WHERE user_id = ? AND conversation_id = ?
+      ORDER BY deleted_at DESC
+      LIMIT 1
+      `,
+      [receiver_id, conversationId],
+    );
+
+    const senderDeletedAt = delSender?.deleted_at || null;
+    const receiverDeletedAt = delReceiver?.deleted_at || null;
+
+    // -----------------------------------------
+    // PREVIEW QUERY WITH FILTER
+    // -----------------------------------------
+    const previewSQL = `
       SELECT 
         c.id AS conversationId,
         u.id AS otherUserId,
         CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
         u.profile_photo AS otherUserPhoto,
-        m.message_text AS lastMessageText,
-        m.sent_at AS lastMessageTime,
+        (
+          SELECT message_text 
+          FROM messages 
+          WHERE conversation_id = c.id
+          AND (? IS NULL OR sent_at > ?)
+          ORDER BY sent_at DESC 
+          LIMIT 1
+        ) AS lastMessageText,
+        (
+          SELECT sent_at 
+          FROM messages 
+          WHERE conversation_id = c.id
+          AND (? IS NULL OR sent_at > ?)
+          ORDER BY sent_at DESC 
+          LIMIT 1
+        ) AS lastMessageTime,
         (
           SELECT COUNT(*) 
           FROM messages 
           WHERE conversation_id = c.id 
           AND receiver_id = ?
           AND is_read = 0
+          AND (? IS NULL OR sent_at > ?)
         ) AS unreadCount
       FROM conversations c
       JOIN conversation_participants cp_me
@@ -113,63 +156,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         ON cp_other.conversation_id = c.id AND cp_other.user_id != cp_me.user_id
       JOIN users u 
         ON u.id = cp_other.user_id
-      LEFT JOIN messages m 
-        ON m.id = (
-          SELECT id FROM messages 
-          WHERE conversation_id = c.id 
-          ORDER BY sent_at DESC 
-          LIMIT 1
-        )
       WHERE c.id = ?
       LIMIT 1
-      `,
-      [sender_id, sender_id, conversationId],
-    );
+    `;
+
+    // SENDER PREVIEW
+    const [senderRows]: any = await this.db.query(previewSQL, [
+      senderDeletedAt,
+      senderDeletedAt,
+      senderDeletedAt,
+      senderDeletedAt,
+      sender_id,
+      senderDeletedAt,
+      senderDeletedAt,
+      sender_id,
+      conversationId,
+    ]);
 
     const senderPreview = senderRows[0];
 
-    // -------------------------------------------
-    // FETCH CONVERSATION PREVIEW FOR RECEIVER
-    // -------------------------------------------
-    const [receiverRows]: any = await this.db.query(
-      `
-      SELECT 
-        c.id AS conversationId,
-        u.id AS otherUserId,
-        CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
-        u.profile_photo AS otherUserPhoto,
-        m.message_text AS lastMessageText,
-        m.sent_at AS lastMessageTime,
-        (
-          SELECT COUNT(*) 
-          FROM messages 
-          WHERE conversation_id = c.id 
-          AND receiver_id = ?
-          AND is_read = 0
-        ) AS unreadCount
-      FROM conversations c
-      JOIN conversation_participants cp_me
-        ON cp_me.conversation_id = c.id AND cp_me.user_id = ?
-      JOIN conversation_participants cp_other
-        ON cp_other.conversation_id = c.id AND cp_other.user_id != cp_me.user_id
-      JOIN users u 
-        ON u.id = cp_other.user_id
-      LEFT JOIN messages m 
-        ON m.id = (
-          SELECT id FROM messages 
-          WHERE conversation_id = c.id 
-          ORDER BY sent_at DESC 
-          LIMIT 1
-        )
-      WHERE c.id = ?
-      LIMIT 1
-      `,
-      [receiver_id, receiver_id, conversationId],
-    );
+    // RECEIVER PREVIEW
+    const [receiverRows]: any = await this.db.query(previewSQL, [
+      receiverDeletedAt,
+      receiverDeletedAt,
+      receiverDeletedAt,
+      receiverDeletedAt,
+      receiver_id,
+      receiverDeletedAt,
+      receiverDeletedAt,
+      receiver_id,
+      conversationId,
+    ]);
 
     const receiverPreview = receiverRows[0];
 
-    // EMIT UPDATED PREVIEW TO BOTH USERS
     const senderSocket = this.clients.get(sender_id);
     if (senderSocket && senderPreview) {
       this.server.to(senderSocket).emit('conversationUpdate', senderPreview);
@@ -184,14 +204,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { delivered: !!receiverSocket };
   }
 
-  // --------------------------------
-  // MARK MESSAGES AS READ
-  // --------------------------------
   @SubscribeMessage('mark_read')
   async markMessagesRead(@MessageBody() data: any) {
     const { conversationId, userId } = data;
 
-    // 1) Update DB
     await this.db.query(
       `
       UPDATE messages
@@ -202,7 +218,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       [conversationId, userId],
     );
 
-    // 2) Recompute preview for THIS user (so unreadCount becomes 0)
+    // FETCH DELETED_AT
+    const [[del]]: any = await this.db.query(
+      `
+      SELECT deleted_at 
+      FROM conversation_deleted
+      WHERE user_id = ? AND conversation_id = ?
+      ORDER BY deleted_at DESC
+      LIMIT 1
+      `,
+      [userId, conversationId],
+    );
+
+    const deletedAt = del?.deleted_at || null;
+
     const [rows]: any = await this.db.query(
       `
       SELECT 
@@ -210,14 +239,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         u.id AS otherUserId,
         CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
         u.profile_photo AS otherUserPhoto,
-        m.message_text AS lastMessageText,
-        m.sent_at AS lastMessageTime,
         (
-          SELECT COUNT(*) FROM messages 
+          SELECT message_text 
+          FROM messages 
           WHERE conversation_id = c.id
-          AND receiver_id = ?
-          AND is_read = 0
-        ) AS unreadCount
+          AND (? IS NULL OR sent_at > ?)
+          ORDER BY sent_at DESC 
+          LIMIT 1
+        ) AS lastMessageText,
+        (
+          SELECT sent_at 
+          FROM messages 
+          WHERE conversation_id = c.id
+          AND (? IS NULL OR sent_at > ?)
+          ORDER BY sent_at DESC 
+          LIMIT 1
+        ) AS lastMessageTime,
+        0 AS unreadCount
       FROM conversations c
       JOIN conversation_participants cp_me
         ON cp_me.conversation_id = c.id AND cp_me.user_id = ?
@@ -225,23 +263,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         ON cp_other.conversation_id = c.id AND cp_other.user_id != cp_me.user_id
       JOIN users u
         ON u.id = cp_other.user_id
-      LEFT JOIN messages m
-        ON m.id = (
-          SELECT id FROM messages
-          WHERE conversation_id = c.id
-          ORDER BY sent_at DESC
-          LIMIT 1
-        )
       WHERE c.id = ?
       LIMIT 1
       `,
-      [userId, userId, conversationId],
+      [deletedAt, deletedAt, deletedAt, deletedAt, userId, conversationId],
     );
 
     const preview = rows[0];
     const socketId = this.clients.get(userId);
 
-    // 3) Push fresh preview to that user so UI loses highlight
     if (socketId && preview) {
       this.server.to(socketId).emit('conversationUpdate', preview);
     }

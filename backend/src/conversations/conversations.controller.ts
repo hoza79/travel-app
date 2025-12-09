@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Req, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Req,
+  Body,
+  Delete,
+  Param,
+} from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 import { verifyToken } from 'src/utils/jwt.utils';
 
@@ -17,5 +25,17 @@ export class ConversationsController {
   async getUserConversations(@Req() req) {
     const userId = verifyToken(req);
     return this.conversationsService.getUserConversations(userId);
+  }
+
+  @Delete(':conversationId')
+  async deleteConversation(
+    @Req() req,
+    @Param('conversationId') conversationId: string,
+  ) {
+    const userId = verifyToken(req);
+    return this.conversationsService.deleteConversation(
+      userId,
+      Number(conversationId),
+    );
   }
 }

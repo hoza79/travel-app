@@ -42,34 +42,53 @@ export class ConversationsService {
   async getUserConversations(userId: number) {
     const [rows]: any = await this.db.query(
       `
-      SELECT 
-        c.id AS conversationId,
-        u.id AS otherUserId,
-        CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
-        u.profile_photo AS otherUserPhoto,
-        m.message_text AS lastMessageText,
-        m.sent_at AS lastMessageTime,
-        (
-          SELECT COUNT(*) FROM messages 
-          WHERE conversation_id = c.id
-          AND receiver_id = ?
-          AND is_read = 0
-        ) AS unreadCount
-      FROM conversations c
-      JOIN conversation_participants cp ON cp.conversation_id = c.id
-      JOIN conversation_participants cp2 ON cp2.conversation_id = c.id AND cp2.user_id != cp.user_id
-      JOIN users u ON u.id = cp2.user_id
-      LEFT JOIN messages m ON m.id = (
+    SELECT 
+      c.id AS conversationId,
+      u.id AS otherUserId,
+      CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
+      u.profile_photo AS otherUserPhoto,
+      m.message_text AS lastMessageText,
+      m.sent_at AS lastMessageTime,
+      (
+        SELECT COUNT(*) FROM messages 
+        WHERE conversation_id = c.id
+        AND receiver_id = ?
+        AND is_read = 0
+      ) AS unreadCount
+    FROM conversations c
+    JOIN conversation_participants cp 
+      ON cp.conversation_id = c.id
+    JOIN conversation_participants cp2 
+      ON cp2.conversation_id = c.id 
+      AND cp2.user_id != cp.user_id
+    JOIN users u 
+      ON u.id = cp2.user_id
+    LEFT JOIN messages m 
+      ON m.id = (
         SELECT id FROM messages 
         WHERE conversation_id = c.id 
-        ORDER BY sent_at DESC LIMIT 1
+        ORDER BY sent_at DESC 
+        LIMIT 1
       )
-      WHERE cp.user_id = ?
-      ORDER BY m.sent_at DESC
-      `,
-      [userId, userId],
+    WHERE cp.user_id = ?
+    AND c.id NOT IN (
+      SELECT conversation_id 
+      FROM conversation_deleted 
+      WHERE user_id = ?
+    )
+    ORDER BY m.sent_at DESC
+    `,
+      [userId, userId, userId],
     );
 
     return rows;
+  }
+
+  async deleteConversation(userId: number, conversationId: number) {
+    const [rows] = await this.db.query(
+      `INSERT INTO conversation_deleted (conversation_id, user_id, deleted_at) VALUES (?, ?, NOW())`,
+      [conversationId, userId],
+    );
+    return { success: true };
   }
 }

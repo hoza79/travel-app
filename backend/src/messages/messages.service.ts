@@ -20,14 +20,33 @@ export class MessagesService {
   }
 
   async getMessages(userId: number, conversationId: number) {
+    // get deleted_at for THIS user
+    const [[del]]: any = await this.db.query(
+      `
+      SELECT deleted_at
+      FROM conversation_deleted
+      WHERE user_id = ?
+      AND conversation_id = ?
+      ORDER BY deleted_at DESC
+      LIMIT 1
+      `,
+      [userId, conversationId],
+    );
+
+    const deletedAt = del?.deleted_at || null;
+
     const [rows]: any = await this.db.query(
       `
       SELECT *
       FROM messages
       WHERE conversation_id = ?
+      AND (
+        ? IS NULL
+        OR sent_at > ?
+      )
       ORDER BY sent_at ASC
       `,
-      [conversationId],
+      [conversationId, deletedAt, deletedAt],
     );
 
     return rows;

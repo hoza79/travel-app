@@ -1,4 +1,3 @@
-// src/screens/MessagesScreen.js
 import React, { useEffect, useState } from "react";
 import { View, TextInput, Image, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -32,7 +31,19 @@ const MessagesScreen = () => {
     }
   };
 
-  // Refresh whenever screen is opened again
+  const deleteConversation = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      await fetch(`${BASE_URL}/conversations/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setConversations((prev) => prev.filter((c) => c.conversationId !== id));
+    } catch {}
+  };
+
   useEffect(() => {
     if (isFocused) load();
   }, [isFocused]);
@@ -50,13 +61,20 @@ const MessagesScreen = () => {
 
       const handleConversationUpdate = (preview) => {
         setConversations((prev) => {
-          const idx = prev.findIndex(
+          // If user deleted the conversation earlier, DO NOT merge old data
+          const exists = prev.some(
             (c) => c.conversationId === preview.conversationId
           );
-          if (idx === -1) return [preview, ...prev];
-          const updated = [...prev];
-          updated[idx] = preview;
-          return updated;
+
+          if (!exists) {
+            // fresh conversation
+            return [preview, ...prev];
+          }
+
+          // overwrite completely with fresh preview (no old state)
+          return prev.map((c) =>
+            c.conversationId === preview.conversationId ? preview : c
+          );
         });
       };
 
@@ -88,7 +106,11 @@ const MessagesScreen = () => {
 
       <ScrollView style={styles.scrollView}>
         {conversations.map((c) => (
-          <Chat key={c.conversationId} conversation={c} />
+          <Chat
+            key={c.conversationId}
+            conversation={c}
+            onDelete={deleteConversation}
+          />
         ))}
       </ScrollView>
     </View>
