@@ -119,12 +119,24 @@ const TravelCard = ({
     loadStatus();
   }, [tripId]);
 
+  // ⭐ IMPORTANT: handle silent REJECTION instantly
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
       const handler = (notif) => {
+        if (notif?.interestRequestId === interestRequestId) {
+          // Deleted request → FULL instantly
+          setStatus("rejected");
+          setIsFull(true);
+        }
+      };
+
+      socket.on("notification_deleted", handler);
+
+      // handle accepted event from owner
+      socket.on("new_notification", (notif) => {
         try {
           if (notif?.trip_id !== tripId) return;
 
@@ -132,18 +144,15 @@ const TravelCard = ({
             setStatus("accepted");
             fetchAcceptedCount();
           }
-
-          if (notif?.type === "interest_request_deleted") {
-            setStatus(null);
-            fetchAcceptedCount();
-          }
         } catch {}
-      };
+      });
 
-      socket.on("new_notification", handler);
-      return () => socket.off("new_notification", handler);
+      return () => {
+        socket.off("notification_deleted", handler);
+        socket.off("new_notification");
+      };
     });
-  }, [tripId]);
+  }, [tripId, interestRequestId]);
 
   const handleInterest = async () => {
     if (isRequesting) return;
@@ -165,7 +174,9 @@ const TravelCard = ({
       });
 
       if (res.status === 400) {
+        // Trip is full
         setIsFull(true);
+        setStatus("rejected");
         return;
       }
 
@@ -247,6 +258,15 @@ const TravelCard = ({
     };
     loadAvatar();
   }, [profilePhoto]);
+
+  // ⭐ NEW — FULL state based on rejection
+  const isRejected = status === "rejected";
+
+  const showFull =
+    !embeddedMode &&
+    !isOwner &&
+    (isFull || isRejected) &&
+    status !== "accepted";
 
   const buttonLabel =
     status === null
@@ -338,7 +358,7 @@ const TravelCard = ({
               {seatsAvailable} Seats available
             </Text>
 
-            {/* DELETE BUTTON */}
+            {/* OWNER DELETE */}
             {isOwner && (
               <TouchableOpacity
                 onPress={handleDeleteTrip}
@@ -354,8 +374,8 @@ const TravelCard = ({
               </TouchableOpacity>
             )}
 
-            {/* ⭐ FIXED FULL LOGIC — ONLY HERE CHANGED */}
-            {!embeddedMode && !isOwner && isFull && status !== "accepted" && (
+            {/* ⭐ FULL BADGE FOR REQUESTER */}
+            {showFull && (
               <View
                 style={{
                   backgroundColor: "rgba(255,255,255,0.2)",
@@ -373,55 +393,50 @@ const TravelCard = ({
               </View>
             )}
 
-            {/* USER BUTTONS */}
-            {!embeddedMode &&
-              !isOwner &&
-              !(isFull && status !== "accepted") && (
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    isRequesting || status === "pending"
-                      ? { opacity: 0.6 }
-                      : undefined,
-                  ]}
-                  disabled={isRequesting || status === "pending"}
-                  onPress={async () => {
-                    if (status === "accepted") {
-                      const token = await AsyncStorage.getItem("token");
+            {/* ⭐ NORMAL BUTTONS */}
+            {!embeddedMode && !isOwner && !showFull && (
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  isRequesting || status === "pending"
+                    ? { opacity: 0.6 }
+                    : undefined,
+                ]}
+                disabled={isRequesting || status === "pending"}
+                onPress={async () => {
+                  if (status === "accepted") {
+                    const token = await AsyncStorage.getItem("token");
 
-                      const res = await fetch(
-                        `${BASE_URL}/conversations/start`,
-                        {
-                          method: "POST",
-                          headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({
-                            otherUserId: chatUserId,
-                          }),
-                        }
-                      );
+                    const res = await fetch(`${BASE_URL}/conversations/start`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        otherUserId: chatUserId,
+                      }),
+                    });
 
-                      const data = await res.json();
-                      const conversationId = data.conversationId;
+                    const data = await res.json();
+                    const conversationId = data.conversationId;
 
-                      navigation.navigate("Chat", {
-                        conversationId,
-                        receiverId: chatUserId,
-                        receiverName: chatUserName,
-                        receiverPhoto: chatUserPhoto,
-                      });
-                    } else {
-                      handleInterest();
-                    }
-                  }}
-                >
-                  <Text style={styles.buttonText}>{buttonLabel}</Text>
-                </TouchableOpacity>
-              )}
+                    navigation.navigate("Chat", {
+                      conversationId,
+                      receiverId: chatUserId,
+                      receiverName: chatUserName,
+                      receiverPhoto: chatUserPhoto,
+                    });
+                  } else {
+                    handleInterest();
+                  }
+                }}
+              >
+                <Text style={styles.buttonText}>{buttonLabel}</Text>
+              </TouchableOpacity>
+            )}
 
-            {/* — Notification Buttons Remain UNTOUCHED — */}
+            {/* EMBEDDED MODE for notifications */}
             {embeddedMode && notifType === "interest_request" && isOwner && (
               <View
                 style={{
@@ -478,7 +493,8 @@ const TravelCard = ({
                         headers: { Authorization: `Bearer ${token}` },
                       }
                     );
-                    setStatus(null);
+                    setStatus("rejected");
+                    setIsFull(true);
                     fetchAcceptedCount();
                   }}
                   style={{

@@ -19,7 +19,6 @@ import TravelCard from "../common/TravelCard";
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState([]);
   const { setUnreadCount } = useContext(NotificationContext);
-
   const isFocused = useIsFocused();
 
   const [selectedTrip, setSelectedTrip] = useState(null);
@@ -40,7 +39,6 @@ export default function NotificationsScreen() {
 
   const openTripPopup = async (notification) => {
     if (!notification) return;
-
     const tripId = notification.trip_id;
     setPopupLoading(true);
 
@@ -94,7 +92,6 @@ export default function NotificationsScreen() {
     };
   }, []);
 
-  // ⭐ Mark read on focus
   useEffect(() => {
     if (!isFocused) return;
 
@@ -148,6 +145,7 @@ export default function NotificationsScreen() {
 
             {n.type === "interest_request" && (
               <View style={styles.buttonsRowCircle}>
+                {/* ACCEPT BUTTON */}
                 <TouchableOpacity
                   onPress={async () => {
                     const token = await AsyncStorage.getItem("token");
@@ -172,11 +170,24 @@ export default function NotificationsScreen() {
                   <Text style={styles.circleText}>✓</Text>
                 </TouchableOpacity>
 
+                {/* ❗ FIXED REJECT BUTTON — NOW CALLS BACKEND ❗ */}
                 <TouchableOpacity
-                  onPress={() => {
-                    setNotifications((prev) =>
-                      prev.filter((x) => x.id !== n.id)
-                    );
+                  onPress={async () => {
+                    const token = await AsyncStorage.getItem("token");
+
+                    try {
+                      await fetch(
+                        `${BASE_URL}/interest_requests/${n.interest_request_id}`,
+                        {
+                          method: "DELETE",
+                          headers: { Authorization: `Bearer ${token}` },
+                        }
+                      );
+                    } catch (err) {
+                      console.log("Reject error:", err);
+                    }
+
+                    load();
                     setUnreadCount((prev) => Math.max(prev - 1, 0));
                   }}
                   style={styles.circleBtn}
@@ -205,11 +216,10 @@ export default function NotificationsScreen() {
                       {...selectedTrip}
                       embeddedMode={true}
                       tripId={selectedTrip?.tripId}
-                      // ⭐ FIXED LINE: Always correct owner ID for chat
                       creatorId={
                         selectedTrip?.notifType === "interest_accepted"
-                          ? selectedTrip?.senderId // owner accepted → sender is owner
-                          : selectedTrip?.creatorId // feed data
+                          ? selectedTrip?.senderId
+                          : selectedTrip?.creatorId
                       }
                       notifType={selectedTrip?.notifType}
                       interestRequestId={selectedTrip?.interestRequestId}

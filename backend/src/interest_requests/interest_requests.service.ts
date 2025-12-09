@@ -1,6 +1,7 @@
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { CreateInterestRequestDto } from './dto/create-interest_request.dto';
 
 @Injectable()
@@ -8,9 +9,10 @@ export class InterestRequestsService {
   constructor(
     @Inject('DATABASE_CONNECTION') private readonly db: Pool,
     private readonly notificationsService: NotificationsService,
+    private readonly gateway: NotificationsGateway, // ⭐ FIXED INJECTION
   ) {}
 
-  // ⭐ NEW — count accepted requests
+  // count accepted
   async getAcceptedCount(tripId: number) {
     const [rows]: any = await this.db.query(
       `
@@ -31,7 +33,6 @@ export class InterestRequestsService {
       throw new BadRequestException('Cannot request your own trip');
     }
 
-    // ⭐ prevent interest if full
     const acceptedCount = (await this.getAcceptedCount(tripId)).accepted;
 
     const [[trip]]: any = await this.db.query(
@@ -94,9 +95,7 @@ export class InterestRequestsService {
   }
 
   async acceptRequest(id: number, ownerId: number) {
-    if (!id || isNaN(id)) {
-      throw new Error('Invalid interest request id');
-    }
+    if (!id || isNaN(id)) throw new Error('Invalid interest request id');
 
     const [[req]]: any = await this.db.query(
       `
@@ -109,7 +108,6 @@ export class InterestRequestsService {
 
     if (!req) throw new BadRequestException('Request not found');
 
-    // ⭐ block accepting beyond available seats
     const acceptedCount = (await this.getAcceptedCount(req.trip_id)).accepted;
 
     const [[trip]]: any = await this.db.query(
@@ -147,7 +145,32 @@ export class InterestRequestsService {
     return { status: 'accepted' };
   }
 
-  remove(id: number) {
-    return `Removed interest request ${id}`;
+  // ⭐ SILENT REJECTION (status = "rejected")
+  async remove(id: number) {
+    const [[req]]: any = await this.db.query(
+      `SELECT requester_id FROM interest_requests WHERE id = ?`,
+      [id],
+    );
+
+    if (!req) return { success: true };
+
+    // Set rejected
+    await this.db.query(
+      `UPDATE interest_requests SET status = 'rejected' WHERE id = ?`,
+      [id],
+    );
+
+    // Delete notifications silently
+    await this.db.query(
+      `DELETE FROM notifications WHERE interest_request_id = ?`,
+      [id],
+    );
+
+    // Silent realtime event → updates button to FULL instantly
+    try {
+      this.gateway.sendDeletion(req.requester_id, id);
+    } catch {}
+
+    return { status: 'rejected' };
   }
 }
