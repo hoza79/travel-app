@@ -6,6 +6,7 @@ import {
   Image,
   Animated,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import styles from "../styles/TravelCard_styles";
 import { useNavigation } from "@react-navigation/native";
@@ -37,11 +38,9 @@ const TravelCard = ({
   embeddedMode,
   notifType,
   interestRequestId,
-
   senderId,
   senderName,
   senderPhoto,
-
   onTripDeleted,
 }) => {
   if (!tripId || isNaN(Number(tripId))) {
@@ -56,6 +55,7 @@ const TravelCard = ({
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const [acceptedCount, setAcceptedCount] = useState(0);
   const [isFull, setIsFull] = useState(false);
@@ -86,9 +86,7 @@ const TravelCard = ({
       const count = data?.accepted ?? 0;
       setAcceptedCount(count);
       setIsFull(count >= seatsAvailable);
-    } catch (err) {
-      console.log("accepted_count error:", err);
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -111,9 +109,7 @@ const TravelCard = ({
         const data = await res.json();
         if (data.status) setStatus(data.status);
         else setStatus(null);
-      } catch (err) {
-        console.log("Status fetch error:", err);
-      }
+      } catch {}
     };
 
     loadStatus();
@@ -159,7 +155,6 @@ const TravelCard = ({
     setIsRequesting(true);
     try {
       const token = await AsyncStorage.getItem("token");
-      if (!token) return;
 
       const res = await fetch(`${BASE_URL}/interest_requests`, {
         method: "POST",
@@ -181,8 +176,7 @@ const TravelCard = ({
       else setStatus("pending");
 
       fetchAcceptedCount();
-    } catch (err) {
-      console.log("Interest error:", err);
+    } catch {
     } finally {
       setIsRequesting(false);
     }
@@ -214,8 +208,7 @@ const TravelCard = ({
       ]).start(() => {
         if (onTripDeleted) onTripDeleted(tripId);
       });
-    } catch (err) {
-      console.log("❌ Delete error:", err);
+    } catch {
       setIsDeleting(false);
     }
   };
@@ -278,19 +271,20 @@ const TravelCard = ({
     <Animated.View
       style={[
         styles.container,
-        {
-          opacity: fadeAnim,
-          transform: [{ scaleY: collapseAnim }],
-        },
+        { opacity: fadeAnim, transform: [{ scaleY: collapseAnim }] },
       ]}
     >
       <TouchableOpacity activeOpacity={0.9}>
         <View>
           <View style={styles.rowCenter}>
             <TouchableOpacity
-              onPress={
-                () => navigation.navigate("UserProfile", { userId: creatorId }) // ⭐ ONLY CHANGE
-              }
+              onPress={() => {
+                if (currentUserId === creatorId) {
+                  navigation.navigate("BottomNavigator", { screen: "Profile" });
+                } else {
+                  navigation.navigate("UserProfile", { userId: creatorId });
+                }
+              }}
               style={styles.profilePicture}
             >
               <Image
@@ -304,9 +298,7 @@ const TravelCard = ({
               <Text style={styles.firstName}>{firstName}</Text>
 
               <View style={styles.seekingRideContainer}>
-                <Text style={{ color: "white", fontWeight: "700" }}>
-                  {tripType}
-                </Text>
+                <Text style={styles.seekingRideText}>{tripType}</Text>
               </View>
             </View>
           </View>
@@ -337,7 +329,7 @@ const TravelCard = ({
           </View>
 
           <TouchableOpacity
-            style={styles.description}
+            style={styles.descriptionContainer}
             onPress={() => setExpanded(!expanded)}
           >
             <Text
@@ -355,44 +347,30 @@ const TravelCard = ({
 
             {isOwner && (
               <TouchableOpacity
-                onPress={handleDeleteTrip}
-                style={[styles.button, { backgroundColor: "#d11", width: 120 }]}
+                onPress={() => setShowModal(true)}
+                style={styles.deleteTripButton}
               >
                 {isDeleting ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={[styles.buttonText, { color: "white" }]}>
-                    Delete
-                  </Text>
+                  <Text style={styles.deleteTripButtonText}>Delete</Text>
                 )}
               </TouchableOpacity>
             )}
 
             {showFull && (
-              <View
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                  paddingHorizontal: 18,
-                  paddingVertical: 10,
-                  borderRadius: 20,
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: "white", fontSize: 16, marginRight: 6 }}>
-                  🔒
-                </Text>
-                <Text style={{ color: "white", fontSize: 16 }}>Full</Text>
+              <View style={styles.fullBadge}>
+                <Text style={styles.fullBadgeIcon}>🔒</Text>
+                <Text style={styles.fullBadgeText}>Full</Text>
               </View>
             )}
 
             {!embeddedMode && !isOwner && !showFull && (
               <TouchableOpacity
                 style={[
-                  styles.button,
-                  isRequesting || status === "pending"
-                    ? { opacity: 0.6 }
-                    : undefined,
+                  styles.actionButton,
+                  (isRequesting || status === "pending") &&
+                    styles.disabledButton,
                 ]}
                 disabled={isRequesting || status === "pending"}
                 onPress={async () => {
@@ -424,19 +402,12 @@ const TravelCard = ({
                   }
                 }}
               >
-                <Text style={styles.buttonText}>{buttonLabel}</Text>
+                <Text style={styles.actionButtonText}>{buttonLabel}</Text>
               </TouchableOpacity>
             )}
 
             {embeddedMode && notifType === "interest_request" && isOwner && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 14,
-                  alignItems: "center",
-                  marginTop: 10,
-                }}
-              >
+              <View style={styles.acceptRejectRow}>
                 <TouchableOpacity
                   onPress={async () => {
                     const token = await AsyncStorage.getItem("token");
@@ -453,25 +424,9 @@ const TravelCard = ({
                     setStatus("accepted");
                     fetchAcceptedCount();
                   }}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: "white",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
+                  style={styles.acceptButton}
                 >
-                  <Text
-                    style={{
-                      color: "#061237",
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginTop: -2,
-                    }}
-                  >
-                    ✓
-                  </Text>
+                  <Text style={styles.acceptRejectText}>✓</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -488,35 +443,16 @@ const TravelCard = ({
                     setIsFull(true);
                     fetchAcceptedCount();
                   }}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: "white",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
+                  style={styles.rejectButton}
                 >
-                  <Text
-                    style={{
-                      color: "#061237",
-                      fontSize: 22,
-                      fontWeight: "700",
-                      marginTop: -2,
-                    }}
-                  >
-                    ✕
-                  </Text>
+                  <Text style={styles.acceptRejectText}>✕</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {embeddedMode && notifType === "interest_accepted" && (
               <TouchableOpacity
-                style={[
-                  styles.button,
-                  { backgroundColor: "white", opacity: 1, marginTop: 10 },
-                ]}
+                style={styles.acceptedMessageButton}
                 onPress={async () => {
                   const token = await AsyncStorage.getItem("token");
 
@@ -542,14 +478,40 @@ const TravelCard = ({
                   });
                 }}
               >
-                <Text style={[styles.buttonText, { color: "#061237" }]}>
-                  Send Message
-                </Text>
+                <Text style={styles.acceptedMessageText}>Send Message</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
       </TouchableOpacity>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <Modal transparent visible={showModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Delete this trip?</Text>
+
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                onPress={() => setShowModal(false)}
+                style={styles.modalCancelButton}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setShowModal(false);
+                  handleDeleteTrip();
+                }}
+                style={styles.modalDeleteButton}
+              >
+                <Text style={styles.modalButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Animated.View>
   );
 };

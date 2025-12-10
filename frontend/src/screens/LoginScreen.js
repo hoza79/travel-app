@@ -40,7 +40,10 @@ const LoginScreen = ({ navigation }) => {
           await AsyncStorage.setItem("userId", data.user.id.toString());
         }
 
-        navigation.navigate("BottomNavigator");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "BottomNavigator" }],
+        });
       } else {
         console.log("❌ Login failed:", data.message || "No token received");
       }

@@ -1,4 +1,3 @@
-// src/screens/HomeScreen.js
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -14,6 +13,7 @@ import styles from "../styles/HomeScreen_styles";
 import * as Location from "expo-location";
 import BASE_URL from "../config/api";
 import { getSocket, onSocketReady } from "../socket";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const HomeScreen = () => {
   const [items, setItems] = useState([]);
@@ -23,19 +23,18 @@ const HomeScreen = () => {
   const [userLat, setUserLat] = useState(null);
   const [userLng, setUserLng] = useState(null);
 
-  // TRIP DELETE HANDLER
   const handleTripDeleted = (deletedId) => {
     setItems((prev) => prev.filter((item) => item.id !== deletedId));
     setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
   };
 
-  // PHOTO DELETE HANDLER
-  const handlePhotoDeleted = (deletedId) => {
-    setItems((prev) => prev.filter((item) => item.id !== deletedId));
-    setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
+  const handlePhotoDeleted = (deletedPhotoId) => {
+    setItems((prev) => prev.filter((item) => item.id !== deletedPhotoId));
+    setFilteredItems((prev) =>
+      prev.filter((item) => item.id !== deletedPhotoId)
+    );
   };
 
-  // FETCH NEARBY TRIPS + PHOTOS
   const fetchAll = async (lat, lng) => {
     try {
       const [tripsRes, photosRes] = await Promise.all([
@@ -45,7 +44,6 @@ const HomeScreen = () => {
 
       const trips = await tripsRes.json().catch(() => []);
       const rawPhotos = await photosRes.json().catch(() => []);
-
       const photos = Array.isArray(rawPhotos) ? rawPhotos : [];
 
       const merged = [
@@ -64,7 +62,6 @@ const HomeScreen = () => {
     }
   };
 
-  // LOAD LOCATION + FETCH
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -81,7 +78,6 @@ const HomeScreen = () => {
     })();
   }, []);
 
-  // SOCKET EVENTS
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -92,10 +88,12 @@ const HomeScreen = () => {
       });
 
       socket.on("trip_deleted", ({ tripId }) => {
+        console.log("🔥 Trip deleted event:", tripId);
         handleTripDeleted(tripId);
       });
 
       socket.on("photo_deleted", ({ photoId }) => {
+        console.log("🔥 Photo deleted event:", photoId);
         handlePhotoDeleted(photoId);
       });
 
@@ -107,7 +105,6 @@ const HomeScreen = () => {
     });
   }, [userLat, userLng]);
 
-  // SEARCH FILTER
   useEffect(() => {
     if (!search.trim()) {
       setFilteredItems(items);
@@ -115,7 +112,6 @@ const HomeScreen = () => {
     }
 
     const lower = search.toLowerCase();
-
     const results = items.filter((it) => {
       const a = it.origin ?? "";
       const b = it.destination ?? "";
@@ -127,10 +123,13 @@ const HomeScreen = () => {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <FlashList
           data={filteredItems}
           keyboardShouldPersistTaps="handled"
+          keyExtractor={(item) =>
+            item.feedType === "photo" ? `photo-${item.id}` : `trip-${item.id}`
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -152,12 +151,12 @@ const HomeScreen = () => {
             if (item.feedType === "photo") {
               return (
                 <PhotoCard
+                  id={item.id}
+                  user_id={item.user_id}
                   userName={item.first_name}
                   caption={item.description}
                   photos={[item.photo_url]}
                   profilePhoto={item.profile_photo}
-                  id={item.id} // ✅ MATCHES YOUR PHOTOCARD
-                  user_id={item.user_id} // ✅ MATCHES YOUR PHOTOCARD
                   onPhotoDeleted={handlePhotoDeleted}
                 />
               );
@@ -190,7 +189,7 @@ const HomeScreen = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         />
-      </View>
+      </SafeAreaView>
     </TouchableWithoutFeedback>
   );
 };

@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
 import { CreatePostDto } from './dto/create-post.dto';
-import { UpdatePostDto } from './dto/update-post.dto';
 import { getCoordinates } from 'src/utils/geocoding.utils';
 import { CreatePhotoDto } from './dto/create-photo.dto';
 import { NotificationsGateway } from 'src/notifications/notifications.gateway';
@@ -235,17 +234,15 @@ export class PostService {
 
       const coords = await getCoordinates(location);
 
-      if (!coords || !coords.lat || !coords.lng) {
+      if (!coords?.lat || !coords?.lng) {
         throw new BadRequestException('Invalid location');
       }
 
-      const { lat, lng } = coords;
-
       await this.db.query(
         `INSERT INTO photos 
-        (user_id, photo_url, location, description, photo_lat, photo_lng)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [userId, photo_url, location, description, lat, lng],
+          (user_id, photo_url, location, description, photo_lat, photo_lng)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [userId, photo_url, location, description, coords.lat, coords.lng],
       );
 
       return { message: 'Photo post created successfully' };
@@ -256,7 +253,7 @@ export class PostService {
   }
 
   // ---------------------------------------------------------------------
-  // ⭐ GET ALL PHOTOS (NOW RETURNS user_id)
+  // ⭐ GET ALL PHOTOS
   // ---------------------------------------------------------------------
   async getAllPhotos(userLat?: number, userLng?: number) {
     try {
@@ -271,9 +268,9 @@ export class PostService {
             photos.created_at,
             users.first_name,
             users.profile_photo
-          FROM photos
-          JOIN users ON photos.user_id = users.id
-          ORDER BY photos.created_at DESC`,
+           FROM photos
+           JOIN users ON photos.user_id = users.id
+           ORDER BY photos.created_at DESC`,
         );
         return rows;
       }
@@ -312,7 +309,7 @@ export class PostService {
   }
 
   // ---------------------------------------------------------------------
-  // ⭐ GET USER PHOTOS (NOW RETURNS user_id)
+  // ⭐ GET PHOTOS BY USER
   // ---------------------------------------------------------------------
   async getPhotosByUser(userId: number) {
     try {
@@ -337,7 +334,7 @@ export class PostService {
   }
 
   // ---------------------------------------------------------------------
-  // ⭐ DELETE PHOTO
+  // ⭐ DELETE PHOTO — NOW BROADCASTS REALTIME
   // ---------------------------------------------------------------------
   async deletePhoto(photoId: number, userId: number) {
     try {
@@ -355,6 +352,9 @@ export class PostService {
       }
 
       await this.db.query(`DELETE FROM photos WHERE id = ?`, [photoId]);
+
+      // ⭐ NEW: broadcast deletion
+      this.notificationsGateway.sendPhotoDeleted(photoId);
 
       return { message: 'Photo deleted successfully' };
     } catch (error) {

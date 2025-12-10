@@ -38,6 +38,10 @@ export default StyleSheet.create({
     height: "100%",
   },
 
+  headerTextWrapper: {
+    flex: 1,
+  },
+
   userName: {
     color: "white",
     fontWeight: "700",
@@ -49,18 +53,17 @@ export default StyleSheet.create({
     fontSize: 14,
   },
 
-  /** DELETE BUTTON **/
   deleteButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255)",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
 
   deleteText: {
-    color: "white",
+    color: "black",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -89,5 +92,62 @@ export default StyleSheet.create({
   footerText: {
     color: "rgba(255,255,255,0.5)",
     fontSize: 13,
+  },
+
+  /* ---------------------------------- */
+  /* MODAL STYLES (flat option A)       */
+  /* ---------------------------------- */
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalContainer: {
+    width: "75%",
+    backgroundColor: "#061237",
+    borderRadius: 18,
+    paddingVertical: 25,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+
+  modalTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+
+  modalButtonsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+
+  modalCancelButton: {
+    flex: 1,
+    marginRight: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+  },
+
+  modalDeleteButton: {
+    flex: 1,
+    marginLeft: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#020d2d",
+    alignItems: "center",
+  },
+
+  modalButtonText: {
+    color: "white",
+    fontSize: 16,
   },
 });

@@ -10,6 +10,7 @@ import styles from "../styles/PhotoCard_styles";
 import FullScreenImageViewer from "./FullScreenImageViewer";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
+import { useNavigation } from "@react-navigation/native";
 
 const PhotoCard = ({
   userName,
@@ -20,9 +21,12 @@ const PhotoCard = ({
   user_id,
   onPhotoDeleted,
 }) => {
+  const navigation = useNavigation();
+
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -64,7 +68,17 @@ const PhotoCard = ({
 
       {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.profilePicture}>
+        {/* ⭐ NOW CLICKABLE → NAVIGATES TO PROFILE */}
+        <TouchableOpacity
+          style={styles.profilePicture}
+          onPress={() => {
+            if (currentUserId === user_id) {
+              navigation.navigate("BottomNavigator", { screen: "Profile" });
+            } else {
+              navigation.navigate("UserProfile", { userId: user_id });
+            }
+          }}
+        >
           <Image
             source={
               profilePhoto
@@ -74,7 +88,7 @@ const PhotoCard = ({
             resizeMode="cover"
             style={styles.profileImage}
           />
-        </View>
+        </TouchableOpacity>
 
         <View style={{ flex: 1 }}>
           <Text style={styles.userName}>{userName}</Text>
@@ -84,7 +98,7 @@ const PhotoCard = ({
         {/* DELETE BUTTON — OWNER ONLY */}
         {isOwner && (
           <TouchableOpacity
-            onPress={handleDeletePhoto}
+            onPress={() => setShowModal(true)}
             style={styles.deleteButton}
           >
             {isDeleting ? (
@@ -116,6 +130,34 @@ const PhotoCard = ({
       <View style={styles.footer}>
         <Text style={styles.footerText}>Shared recently</Text>
       </View>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {showModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Delete this photo?</Text>
+
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                onPress={() => setShowModal(false)}
+                style={styles.modalCancelButton}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setShowModal(false);
+                  handleDeletePhoto();
+                }}
+                style={styles.modalDeleteButton}
+              >
+                <Text style={styles.modalButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 };

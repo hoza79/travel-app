@@ -12,7 +12,7 @@ export default StyleSheet.create({
   },
 
   scrollContent: {
-    paddingTop: 60,
+    paddingTop: 15,
   },
 
   searchBar: {

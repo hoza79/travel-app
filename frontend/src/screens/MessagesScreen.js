@@ -6,6 +6,7 @@ import styles from "../styles/MessagesScreen_styles";
 import Chat from "../common/Chat";
 import { getSocket, onSocketReady } from "../socket";
 import { useIsFocused } from "@react-navigation/native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const MessagesScreen = () => {
   const [conversations, setConversations] = useState([]);
@@ -89,7 +90,7 @@ const MessagesScreen = () => {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.searchBar}>
         <Image
           source={require("../assets/searchIcon.png")}
@@ -113,7 +114,7 @@ const MessagesScreen = () => {
           />
         ))}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

@@ -9,6 +9,8 @@ import {
   TouchableWithoutFeedback,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import { getSocket, onSocketReady } from "../socket";
@@ -120,7 +122,7 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -234,14 +236,14 @@ export default function NotificationsScreen() {
           </View>
         </TouchableWithoutFeedback>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#061237" },
   scrollContent: { paddingTop: 40, paddingHorizontal: 18, paddingBottom: 120 },
-
+  //#010e34ff
   bubble: {
     backgroundColor: "#020d2d",
     padding: 18,

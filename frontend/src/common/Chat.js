@@ -172,7 +172,7 @@ const Chat = ({ conversation, onDelete }) => {
                   marginLeft: 10,
                   paddingVertical: 12,
                   borderRadius: 10,
-                  backgroundColor: "#d11",
+                  backgroundColor: "#020d2d",
                   alignItems: "center",
                 }}
               >

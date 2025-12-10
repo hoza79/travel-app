@@ -16,8 +16,9 @@ import BASE_URL from "../config/api";
 import { getSocket, onSocketReady } from "../socket";
 import styles from "../styles/Chat_styles";
 import { MessageContext } from "../context/MessageContext";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const ChatScreen = ({ route }) => {
+const ChatScreen = ({ route, navigation }) => {
   const { conversationId, receiverId, receiverName, receiverPhoto } =
     route.params;
 
@@ -133,59 +134,71 @@ const ChatScreen = ({ route }) => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.header}>
-        <Image
-          source={
-            receiverPhoto
-              ? { uri: receiverPhoto }
-              : require("../assets/profile-picture.jpeg")
-          }
-          style={styles.headerImage}
-        />
-        <Text style={styles.headerName}>{receiverName}</Text>
-      </View>
-
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.messagesContainer}
-        contentContainerStyle={{ paddingVertical: 10 }}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {messages.map((msg, i) => {
-          const isMine = msg.sender_id === currentUserId;
-
-          return (
-            <View
-              key={i}
-              style={[
-                styles.messageBubble,
-                isMine ? styles.myMessage : styles.theirMessage,
-                { marginVertical: 4 },
-              ]}
-            >
-              <Text style={styles.messageText}>{msg.message_text}</Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Type a message..."
-          placeholderTextColor="#8fa1c7"
-        />
-
-        <TouchableOpacity onPress={send} style={styles.sendButton}>
-          <Text style={styles.sendText}>➤</Text>
+        {/* ⭐ HEADER TOUCHABLE → OPEN PROFILE */}
+        <TouchableOpacity
+          style={styles.header}
+          onPress={() => {
+            if (receiverId === currentUserId) {
+              navigation.navigate("BottomNavigator", { screen: "Profile" });
+            } else {
+              navigation.navigate("UserProfile", { userId: receiverId });
+            }
+          }}
+        >
+          <Image
+            source={
+              receiverPhoto
+                ? { uri: receiverPhoto }
+                : require("../assets/profile-picture.jpeg")
+            }
+            style={styles.headerImage}
+          />
+          <Text style={styles.headerName}>{receiverName}</Text>
         </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messagesContainer}
+          contentContainerStyle={{ paddingVertical: 10 }}
+        >
+          {messages.map((msg, i) => {
+            const isMine = msg.sender_id === currentUserId;
+
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.messageBubble,
+                  isMine ? styles.myMessage : styles.theirMessage,
+                  { marginVertical: 4 },
+                ]}
+              >
+                <Text style={styles.messageText}>{msg.message_text}</Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            placeholder="Type a message..."
+            placeholderTextColor="#8fa1c7"
+          />
+
+          <TouchableOpacity onPress={send} style={styles.sendButton}>
+            <Text style={styles.sendText}>➤</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
