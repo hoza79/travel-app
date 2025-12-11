@@ -35,11 +35,13 @@ export class NotificationsService {
 
     const insertedId = res.insertId;
 
+    // ⭐ UPDATED — return first + last name
     const [[notif]]: any = await this.db.query(
       `
         SELECT 
           notifications.*,
-          users.first_name AS sender_name,
+          users.first_name AS sender_first_name,
+          users.last_name AS sender_last_name,
           users.profile_photo AS sender_photo
         FROM notifications
         JOIN users ON notifications.sender_id = users.id
@@ -69,7 +71,8 @@ export class NotificationsService {
       `
         SELECT 
           notifications.*,
-          users.first_name AS sender_name,
+          users.first_name AS sender_first_name,
+          users.last_name AS sender_last_name,
           users.profile_photo AS sender_photo
         FROM notifications
         JOIN users ON notifications.sender_id = users.id
@@ -95,7 +98,8 @@ export class NotificationsService {
       `
         SELECT 
           notifications.*,
-          users.first_name AS sender_name,
+          users.first_name AS sender_first_name,
+          users.last_name AS sender_last_name,
           users.profile_photo AS sender_photo
         FROM notifications
         JOIN users ON notifications.sender_id = users.id

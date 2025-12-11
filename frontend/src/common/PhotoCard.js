@@ -5,6 +5,7 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import styles from "../styles/PhotoCard_styles";
 import FullScreenImageViewer from "./FullScreenImageViewer";
@@ -68,7 +69,6 @@ const PhotoCard = ({
 
       {/* HEADER */}
       <View style={styles.header}>
-        {/* ⭐ NOW CLICKABLE → NAVIGATES TO PROFILE */}
         <TouchableOpacity
           style={styles.profilePicture}
           onPress={() => {
@@ -95,7 +95,6 @@ const PhotoCard = ({
           <Text style={styles.subText}>Shared a photo</Text>
         </View>
 
-        {/* DELETE BUTTON — OWNER ONLY */}
         {isOwner && (
           <TouchableOpacity
             onPress={() => setShowModal(true)}
@@ -131,8 +130,8 @@ const PhotoCard = ({
         <Text style={styles.footerText}>Shared recently</Text>
       </View>
 
-      {/* DELETE CONFIRMATION MODAL */}
-      {showModal && (
+      {/* UNIFIED DELETE MODAL (same as TravelCard) */}
+      <Modal transparent visible={showModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Delete this photo?</Text>
@@ -157,7 +156,7 @@ const PhotoCard = ({
             </View>
           </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 };

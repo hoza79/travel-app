@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const MessagesScreen = () => {
   const [conversations, setConversations] = useState([]);
+  const [search, setSearch] = useState("");
   const isFocused = useIsFocused();
 
   const load = async () => {
@@ -62,17 +63,14 @@ const MessagesScreen = () => {
 
       const handleConversationUpdate = (preview) => {
         setConversations((prev) => {
-          // If user deleted the conversation earlier, DO NOT merge old data
           const exists = prev.some(
             (c) => c.conversationId === preview.conversationId
           );
 
           if (!exists) {
-            // fresh conversation
             return [preview, ...prev];
           }
 
-          // overwrite completely with fresh preview (no old state)
           return prev.map((c) =>
             c.conversationId === preview.conversationId ? preview : c
           );
@@ -89,6 +87,15 @@ const MessagesScreen = () => {
     });
   }, []);
 
+  // --------------------------------------------------------
+  // SEARCH using otherUserName
+  // --------------------------------------------------------
+  const filtered = conversations.filter((c) => {
+    const name = c.otherUserName?.toLowerCase() || "";
+    const term = search.toLowerCase();
+    return name.includes(term);
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.searchBar}>
@@ -102,11 +109,13 @@ const MessagesScreen = () => {
           placeholderTextColor={"rgb(87,107,134)"}
           placeholder="Search"
           style={styles.searchBarTextInput}
+          value={search}
+          onChangeText={setSearch}
         />
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {conversations.map((c) => (
+        {filtered.map((c) => (
           <Chat
             key={c.conversationId}
             conversation={c}

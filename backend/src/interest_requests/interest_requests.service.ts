@@ -72,7 +72,7 @@ export class InterestRequestsService {
         senderId: requesterId,
         tripId,
         type: 'interest_request',
-        message: 'Someone wants to join your trip',
+        message: 'Wants to join your trip',
         interestRequestId,
       });
     }
@@ -137,7 +137,7 @@ export class InterestRequestsService {
         senderId: ownerId,
         tripId: req.trip_id,
         type: 'interest_accepted',
-        message: 'Your request was accepted!',
+        message: 'Accepted your request!',
         interestRequestId: id,
       });
     }

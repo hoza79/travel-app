@@ -52,7 +52,8 @@ export default function NotificationsScreen() {
       const tripData = await res.json();
 
       const senderId = notification.sender_id;
-      const senderName = notification.sender_name;
+      const senderFirst = notification.sender_first_name;
+      const senderLast = notification.sender_last_name;
       const senderPhoto = notification.sender_photo;
 
       setSelectedTrip({
@@ -62,7 +63,8 @@ export default function NotificationsScreen() {
         interestRequestId: notification.interest_request_id,
         notifType: notification.type,
         senderId,
-        senderName,
+        senderFirst,
+        senderLast,
         senderPhoto,
       });
     } catch (err) {
@@ -71,8 +73,6 @@ export default function NotificationsScreen() {
 
     setPopupLoading(false);
   };
-
-  const closePopup = () => setSelectedTrip(null);
 
   useEffect(() => {
     load();
@@ -123,87 +123,108 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {notifications.map((n, i) => (
-          <TouchableOpacity
-            key={n.id || i}
-            style={styles.bubble}
-            onPress={() => openTripPopup(n)}
-          >
-            <View style={styles.headerRow}>
-              <Image
-                source={{
-                  uri: n.sender_photo || "https://i.stack.imgur.com/l60Hf.png",
-                }}
-                style={styles.avatar}
-              />
-              <Text style={styles.name}>{n.sender_name}</Text>
-            </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {notifications.map((n, i) => {
+          const dateObj = new Date(n.created_at);
 
-            <Text style={styles.message}>{n.message}</Text>
+          const formattedDate = dateObj.toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+          });
 
-            {n.type === "interest_request" && (
-              <View style={styles.buttonsRowCircle}>
-                {/* ACCEPT BUTTON */}
-                <TouchableOpacity
-                  onPress={async () => {
-                    const token = await AsyncStorage.getItem("token");
-                    try {
-                      await fetch(
-                        `${BASE_URL}/interest_requests/${n.interest_request_id}/accept`,
-                        {
-                          method: "PATCH",
-                          headers: {
-                            "Content-Type": "application/json",
-                            Authorization: `Bearer ${token}`,
-                          },
-                        }
-                      );
+          const formattedTime = dateObj.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
 
-                      load();
-                      setUnreadCount((prev) => Math.max(prev - 1, 0));
-                    } catch {}
-                  }}
-                  style={styles.circleBtn}
-                >
-                  <Text style={styles.circleText}>✓</Text>
-                </TouchableOpacity>
+          return (
+            <TouchableOpacity
+              key={n.id || i}
+              style={styles.row}
+              onPress={() => openTripPopup(n)}
+            >
+              <View style={styles.bubble}>
+                <View style={styles.rowContent}>
+                  <Image
+                    source={{
+                      uri:
+                        n.sender_photo || "https://i.stack.imgur.com/l60Hf.png",
+                    }}
+                    style={styles.avatar}
+                  />
 
-                {/* ❗ FIXED REJECT BUTTON — NOW CALLS BACKEND ❗ */}
-                <TouchableOpacity
-                  onPress={async () => {
-                    const token = await AsyncStorage.getItem("token");
+                  <View style={styles.textColumn}>
+                    <Text style={styles.name}>
+                      {n.sender_first_name} {n.sender_last_name}
+                    </Text>
 
-                    try {
-                      await fetch(
-                        `${BASE_URL}/interest_requests/${n.interest_request_id}`,
-                        {
-                          method: "DELETE",
-                          headers: { Authorization: `Bearer ${token}` },
-                        }
-                      );
-                    } catch (err) {
-                      console.log("Reject error:", err);
-                    }
+                    <Text style={styles.message}>{n.message}</Text>
+                  </View>
 
-                    load();
-                    setUnreadCount((prev) => Math.max(prev - 1, 0));
-                  }}
-                  style={styles.circleBtn}
-                >
-                  <Text style={styles.circleText}>✕</Text>
-                </TouchableOpacity>
+                  {/* ⭐ HIDE DATE FOR INTEREST REQUESTS ⭐ */}
+                  {n.type !== "interest_request" && (
+                    <View style={styles.timeColumn}>
+                      <Text style={styles.dateText}>{formattedDate}</Text>
+                      <Text style={styles.timeText}>{formattedTime}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {n.type === "interest_request" && (
+                  <View style={styles.buttonsRowCircle}>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const token = await AsyncStorage.getItem("token");
+                        try {
+                          await fetch(
+                            `${BASE_URL}/interest_requests/${n.interest_request_id}/accept`,
+                            {
+                              method: "PATCH",
+                              headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${token}`,
+                              },
+                            }
+                          );
+                          load();
+                          setUnreadCount((prev) => Math.max(prev - 1, 0));
+                        } catch {}
+                      }}
+                      style={styles.circleBtn}
+                    >
+                      <Text style={styles.circleText}>✓</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const token = await AsyncStorage.getItem("token");
+                        try {
+                          await fetch(
+                            `${BASE_URL}/interest_requests/${n.interest_request_id}`,
+                            {
+                              method: "DELETE",
+                              headers: { Authorization: `Bearer ${token}` },
+                            }
+                          );
+                        } catch {}
+
+                        load();
+                        setUnreadCount((prev) => Math.max(prev - 1, 0));
+                      }}
+                      style={styles.circleBtn}
+                    >
+                      <Text style={styles.circleText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            )}
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {(selectedTrip || popupLoading) && (
-        <TouchableWithoutFeedback onPress={closePopup}>
+        <TouchableWithoutFeedback onPress={() => setSelectedTrip(null)}>
           <View style={styles.overlay}>
             <TouchableWithoutFeedback>
               <View style={styles.popupContainer}>
@@ -226,7 +247,7 @@ export default function NotificationsScreen() {
                       notifType={selectedTrip?.notifType}
                       interestRequestId={selectedTrip?.interestRequestId}
                       senderId={selectedTrip?.senderId}
-                      senderName={selectedTrip?.senderName}
+                      senderName={`${selectedTrip?.senderFirst} ${selectedTrip?.senderLast}`}
                       senderPhoto={selectedTrip?.senderPhoto}
                     />
                   </ScrollView>
@@ -242,32 +263,79 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#061237" },
-  scrollContent: { paddingTop: 40, paddingHorizontal: 18, paddingBottom: 120 },
-  //#010e34ff
-  bubble: {
-    backgroundColor: "#020d2d",
-    padding: 18,
-    borderRadius: 20,
-    marginBottom: 20,
+
+  row: {
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgb(20,35,75)",
+    paddingHorizontal: 18,
   },
 
-  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  avatar: { width: 50, height: 50, borderRadius: 28, marginRight: 12 },
-  name: { color: "white", fontSize: 18, fontWeight: "600" },
+  bubble: {
+    backgroundColor: "#071236",
+    padding: 15,
+    borderRadius: 20,
+    width: "100%",
+  },
 
-  message: { color: "#d7d9e8", fontSize: 16, marginBottom: 16, lineHeight: 22 },
+  rowContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 28,
+    marginRight: 12,
+  },
+
+  textColumn: {
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+
+  name: {
+    color: "white",
+    fontSize: 17,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+
+  message: {
+    color: "#d7d9e8",
+    fontSize: 15,
+  },
+
+  timeColumn: {
+    marginLeft: "auto",
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    paddingLeft: 10,
+  },
+
+  dateText: {
+    color: "rgb(120,130,160)",
+    fontSize: 12,
+    marginBottom: 4,
+  },
+
+  timeText: {
+    color: "rgb(120,130,160)",
+    fontSize: 12,
+  },
 
   buttonsRowCircle: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    marginTop: 12,
     gap: 14,
-    marginTop: 8,
   },
 
   circleBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
@@ -275,12 +343,15 @@ const styles = StyleSheet.create({
 
   circleText: {
     color: "#061237",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "bold",
-    marginTop: -2,
   },
 
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   overlay: {
     position: "absolute",

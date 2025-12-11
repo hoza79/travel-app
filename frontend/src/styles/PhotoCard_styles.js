@@ -11,7 +11,6 @@ export default StyleSheet.create({
     backgroundColor: "#061237",
     paddingVertical: 20,
     paddingHorizontal: 20,
-
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.35,
@@ -38,10 +37,6 @@ export default StyleSheet.create({
     height: "100%",
   },
 
-  headerTextWrapper: {
-    flex: 1,
-  },
-
   userName: {
     color: "white",
     fontWeight: "700",
@@ -56,10 +51,8 @@ export default StyleSheet.create({
   deleteButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "rgba(255,255,255)",
+    backgroundColor: "white",
     borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
   },
 
   deleteText: {
@@ -94,9 +87,9 @@ export default StyleSheet.create({
     fontSize: 13,
   },
 
-  /* ---------------------------------- */
-  /* MODAL STYLES (flat option A)       */
-  /* ---------------------------------- */
+  /* ============================= */
+  /* MODAL — MATCHING TRIP MODAL   */
+  /* ============================= */
 
   modalOverlay: {
     flex: 1,
