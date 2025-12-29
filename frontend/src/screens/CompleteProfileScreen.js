@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  Modal,
+} from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "../styles/CompleteProfileScreen_styles";
@@ -14,6 +21,9 @@ const CompleteProfileScreen = ({ navigation }) => {
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [interests, setInterests] = useState("");
+
+  const [showModal, setShowModal] = useState(false);
+  const [message, setMessage] = useState("");
 
   const pickImage = async (type) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -48,22 +58,31 @@ const CompleteProfileScreen = ({ navigation }) => {
   };
 
   const handleContinue = async () => {
+    // FRONTEND VALIDATION (ORDERED)
+    if (!city.trim()) {
+      setMessage("City is required");
+      setShowModal(true);
+      return;
+    }
+
+    if (!profilePhoto) {
+      setMessage("Profile photo is required");
+      setShowModal(true);
+      return;
+    }
+
+    if (!coverPhoto) {
+      setMessage("Cover photo is required");
+      setShowModal(true);
+      return;
+    }
+
     const token = await AsyncStorage.getItem("token");
     if (!token) return;
 
     try {
-      let uploadedProfileUrl = null;
-      let uploadedCoverUrl = null;
-
-      if (profilePhoto) {
-        uploadedProfileUrl = await uploadToCloudinary(profilePhoto);
-        await AsyncStorage.setItem("profilePhoto", uploadedProfileUrl);
-      }
-
-      if (coverPhoto) {
-        uploadedCoverUrl = await uploadToCloudinary(coverPhoto);
-        await AsyncStorage.setItem("coverPhoto", uploadedCoverUrl);
-      }
+      const uploadedProfileUrl = await uploadToCloudinary(profilePhoto);
+      const uploadedCoverUrl = await uploadToCloudinary(coverPhoto);
 
       await fetch(`${BASE_URL}/profile/setup`, {
         method: "POST",
@@ -72,17 +91,22 @@ const CompleteProfileScreen = ({ navigation }) => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          bio,
           city,
+          bio,
           interests,
           profile_photo: uploadedProfileUrl,
           cover_photo: uploadedCoverUrl,
         }),
       });
 
-      navigation.navigate("BottomNavigator");
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "BottomNavigator" }],
+      });
     } catch (err) {
       console.error("❌ Profile setup error:", err);
+      setMessage("Something went wrong");
+      setShowModal(true);
     }
   };
 
@@ -112,18 +136,18 @@ const CompleteProfileScreen = ({ navigation }) => {
 
       <TextInput
         style={styles.input}
-        placeholder="Bio"
-        placeholderTextColor="#B0B0B0"
-        value={bio}
-        onChangeText={setBio}
-      />
-
-      <TextInput
-        style={styles.input}
         placeholder="City"
         placeholderTextColor="#B0B0B0"
         value={city}
         onChangeText={setCity}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Bio"
+        placeholderTextColor="#B0B0B0"
+        value={bio}
+        onChangeText={setBio}
       />
 
       <TextInput
@@ -137,6 +161,24 @@ const CompleteProfileScreen = ({ navigation }) => {
       <TouchableOpacity style={styles.button} onPress={handleContinue}>
         <Text style={styles.buttonText}>Continue</Text>
       </TouchableOpacity>
+
+      {/* ✅ CORRECT APP-WIDE MODAL */}
+      <Modal transparent visible={showModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>{message}</Text>
+
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.modalButtonText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

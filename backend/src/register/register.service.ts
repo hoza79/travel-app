@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { CreateRegisterDto } from './dto/create-register.dto';
 import { UpdateRegisterDto } from './dto/update-register.dto';
 import type { Pool } from 'mysql2/promise';
@@ -37,7 +37,12 @@ export class RegisterService {
           last_name,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
+      // ✅ HANDLE DUPLICATE EMAIL (MySQL)
+      if (error?.code === 'ER_DUP_ENTRY' || error?.errno === 1062) {
+        throw new ConflictException('User already exists');
+      }
+
       console.error('❌ Database Error:', error);
       throw error;
     }

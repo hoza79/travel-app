@@ -1,14 +1,29 @@
-import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateCompleteProfileDto {
-  @IsOptional()
   @IsString()
-  bio?: string;
+  @IsNotEmpty({ message: 'City is required' })
+  city: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Profile photo is required' })
+  profile_photo: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Cover photo is required' })
+  cover_photo: string;
 
   @IsOptional()
   @IsString()
-  city?: string;
+  bio?: string;
 
   @IsOptional()
   @IsString()
@@ -20,12 +35,4 @@ export class CreateCompleteProfileDto {
   @Min(1)
   @Max(120)
   age?: number;
-
-  @IsOptional()
-  @IsString()
-  profile_photo?: string;
-
-  @IsOptional()
-  @IsString()
-  cover_photo?: string;
 }

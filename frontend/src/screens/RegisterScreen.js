@@ -8,10 +8,10 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import styles from "../styles/RegisterScreen_styles";
 import Title from "../common/Title";
-import SuccessMessageBox from "../common/SuccessMessageBox";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
 
@@ -21,16 +21,23 @@ const RegisterScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmedPassword, setConfirmedPassword] = useState("");
-  const [visible, setVisible] = useState(false);
+
+  // ✅ session-only flag (resets on reload)
+  const [hasRegisteredThisSession, setHasRegisteredThisSession] =
+    useState(false);
+
+  const [showModal, setShowModal] = useState(false);
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const handleRegister = async () => {
-    try {
-      // 🔥 important: reset previous session automatically
-      await AsyncStorage.removeItem("token");
-      await AsyncStorage.removeItem("userId");
+    // ✅ User already registered in THIS session → just continue
+    if (hasRegisteredThisSession) {
+      navigation.navigate("CompleteProfileScreen");
+      return;
+    }
 
+    try {
       const response = await fetch(`${BASE_URL}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -49,94 +56,118 @@ const RegisterScreen = ({ navigation }) => {
         : data.message;
 
       if (response.ok && data.token) {
-        // save token + userId
         await AsyncStorage.setItem("token", data.token);
+
         if (data.user?.id) {
           await AsyncStorage.setItem("userId", data.user.id.toString());
         }
 
-        setMessageType("success");
+        // ✅ mark only THIS session as registered
+        setHasRegisteredThisSession(true);
+
         setMessage(messageText);
-        setVisible(true);
-        setTimeout(() => setVisible(false), 1500);
+        setIsSuccess(true);
+        setShowModal(true);
 
         setTimeout(() => {
+          setShowModal(false);
           navigation.navigate("CompleteProfileScreen");
-        }, 1000);
+        }, 1200);
       } else {
-        setMessageType("error");
         setMessage(messageText);
-        setVisible(true);
-        setTimeout(() => setVisible(false), 2000);
+        setIsSuccess(false);
+        setShowModal(true);
       }
     } catch (error) {
       console.error("❌ Registration error:", error);
+      setMessage("Something went wrong");
+      setIsSuccess(false);
+      setShowModal(true);
     }
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-        style={styles.container}
-      >
-        <View style={styles.container}>
-          <Title style={styles.title} />
+    <>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+          style={styles.container}
+        >
+          <View style={styles.container}>
+            <Title style={styles.title} />
 
-          <TextInput
-            placeholder="First Name"
-            placeholderTextColor="white"
-            style={styles.TextInput}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            placeholder="Last Name"
-            placeholderTextColor="white"
-            style={styles.TextInput}
-            onChangeText={setLastName}
-          />
-          <TextInput
-            placeholder="Email"
-            placeholderTextColor="white"
-            style={styles.TextInput}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            placeholder="Password"
-            placeholderTextColor="white"
-            secureTextEntry
-            style={styles.TextInput}
-            onChangeText={setPassword}
-          />
-          <TextInput
-            placeholder="Confirm Password"
-            placeholderTextColor="white"
-            secureTextEntry
-            style={styles.TextInput}
-            onChangeText={setConfirmedPassword}
-          />
+            <TextInput
+              placeholder="First Name"
+              placeholderTextColor="white"
+              style={styles.TextInput}
+              onChangeText={setFirstName}
+            />
+            <TextInput
+              placeholder="Last Name"
+              placeholderTextColor="white"
+              style={styles.TextInput}
+              onChangeText={setLastName}
+            />
+            <TextInput
+              placeholder="Email"
+              placeholderTextColor="white"
+              style={styles.TextInput}
+              onChangeText={setEmail}
+            />
+            <TextInput
+              placeholder="Password"
+              placeholderTextColor="white"
+              secureTextEntry
+              style={styles.TextInput}
+              onChangeText={setPassword}
+            />
+            <TextInput
+              placeholder="Confirm Password"
+              placeholderTextColor="white"
+              secureTextEntry
+              style={styles.TextInput}
+              onChangeText={setConfirmedPassword}
+            />
 
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={handleRegister}
-          >
-            <Text style={styles.registerButtonText}>Continue</Text>
-          </TouchableOpacity>
-
-          {visible && <SuccessMessageBox text={message} type={messageType} />}
-
-          <View style={styles.loginRedirect}>
-            <Text style={styles.haveAnAccountText}>
-              Already have an account?
-            </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-              <Text style={styles.goBackToSignInText}>Sign in</Text>
+            <TouchableOpacity
+              style={styles.registerButton}
+              onPress={handleRegister}
+            >
+              <Text style={styles.registerButtonText}>Continue</Text>
             </TouchableOpacity>
+
+            <View style={styles.loginRedirect}>
+              <Text style={styles.haveAnAccountText}>
+                Already have an account?
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate("Login")}>
+                <Text style={styles.goBackToSignInText}>Sign in</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
+
+      <Modal transparent visible={showModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>{message}</Text>
+
+            {!isSuccess && (
+              <View style={styles.modalButtonsRow}>
+                <TouchableOpacity
+                  onPress={() => setShowModal(false)}
+                  style={styles.modalCancelButton}
+                >
+                  <Text style={styles.modalButtonText}>OK</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+      </Modal>
+    </>
   );
 };
 

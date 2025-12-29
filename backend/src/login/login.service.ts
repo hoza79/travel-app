@@ -1,6 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { CreateLoginDto } from './dto/create-login.dto';
-import { UpdateLoginDto } from './dto/update-login.dto';
 import type { Pool } from 'mysql2/promise';
 import * as bcrypt from 'bcrypt';
 import { generateToken } from 'src/utils/jwt.utils';
@@ -11,44 +10,40 @@ export class LoginService {
 
   async create(createLoginDto: CreateLoginDto) {
     const { email, password } = createLoginDto;
-    try {
-      const [rows] = await this.db.query<any[]>(
-        'SELECT * FROM users WHERE email = ?',
-        [email],
-      );
 
-      if (rows.length === 0) {
-        return { message: 'User not found' };
-      }
+    const [rows] = await this.db.query<any[]>(
+      'SELECT * FROM users WHERE email = ?',
+      [email],
+    );
 
-      const user = rows[0];
+    if (rows.length === 0) {
+      throw new UnauthorizedException('User does not exist');
+    }
 
-      const passwordMatch = await bcrypt.compare(password, user.password_hash);
-      if (!passwordMatch) {
-        return { message: 'Incorrect password' };
-      }
+    const user = rows[0];
 
-      const token = generateToken({
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+    });
+
+    return {
+      message: 'Login successful',
+      token,
+      user: {
         id: user.id,
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
-      });
-
-      return {
-        message: 'Login successful',
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name,
-        },
-      };
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+      },
+    };
   }
 
   findAll() {
@@ -59,7 +54,7 @@ export class LoginService {
     return `This action returns a #${id} login`;
   }
 
-  update(id: number, updateLoginDto: UpdateLoginDto) {
+  update(id: number) {
     return `This action updates a #${id} login`;
   }
 
