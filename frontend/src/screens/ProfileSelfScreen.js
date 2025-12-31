@@ -38,39 +38,31 @@ const ProfileSelfScreen = () => {
       setLoading(true);
       const token = await AsyncStorage.getItem("token");
       const myId = parseInt(await AsyncStorage.getItem("userId"), 10);
-
       if (!token || !myId) return;
 
-      // LOAD YOUR OWN PROFILE
       const res = await fetch(`${BASE_URL}/profile/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       const data = await res.json();
 
-      setName(`${data.first_name} ${data.last_name}`);
+      const first = data.first_name || "";
+      const last = data.last_name || "";
+      const fullName = `${first} ${last}`.trim();
+
+      setName(fullName || "User");
       setBio(data.bio || "");
       setCity(data.city || "");
       setInterests(data.interests || "");
       setProfilePhoto(data.profile_photo || null);
       setCoverPhoto(data.cover_photo || null);
 
-      // SAVE photo in AsyncStorage (like before)
-      await AsyncStorage.setItem("profilePhoto", data.profile_photo || "");
-      await AsyncStorage.setItem("coverPhoto", data.cover_photo || "");
-
-      // LOAD YOUR TRIPS
       const tripsRes = await fetch(`${BASE_URL}/post/my-trips`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      setTrips(await tripsRes.json());
 
-      const tripsData = await tripsRes.json();
-      setTrips(tripsData);
-
-      // LOAD YOUR PHOTOS
       const photosRes = await fetch(`${BASE_URL}/post/photos/${myId}`);
-      const photosData = await photosRes.json();
-      setPhotos(photosData);
+      setPhotos(await photosRes.json());
     } catch (err) {
       console.log("❌ Profile load error:", err);
     } finally {
@@ -104,13 +96,10 @@ const ProfileSelfScreen = () => {
     return <View style={{ flex: 1, backgroundColor: "#051636" }} />;
   }
 
-  const coverSource = coverPhoto
-    ? { uri: coverPhoto }
-    : require("../assets/profile-picture2.jpeg");
-
+  const coverSource = coverPhoto ? { uri: coverPhoto } : null;
   const profileSource = profilePhoto
     ? { uri: profilePhoto }
-    : require("../assets/profile-picture.jpeg");
+    : require("../assets/avatar.png");
 
   return (
     <View style={styles.container}>
@@ -121,14 +110,15 @@ const ProfileSelfScreen = () => {
         }
         ListHeaderComponent={
           <View>
-            {/* HEADER IMAGES */}
             <View style={styles.headerSection}>
-              <TouchableOpacity
-                style={styles.coverPhoto}
-                onPress={() => openImage(coverSource)}
-              >
-                <Image source={coverSource} style={styles.coverPhotoImage} />
-              </TouchableOpacity>
+              {coverSource && (
+                <TouchableOpacity
+                  style={styles.coverPhoto}
+                  onPress={() => openImage(coverSource)}
+                >
+                  <Image source={coverSource} style={styles.coverPhotoImage} />
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={styles.profilePicture}
@@ -138,10 +128,8 @@ const ProfileSelfScreen = () => {
               </TouchableOpacity>
             </View>
 
-            {/* NAME + EDIT BUTTON */}
             <View style={styles.nameSection}>
               <Text style={styles.name}>{name}</Text>
-
               <TouchableOpacity style={styles.editPenContainer}>
                 <Image
                   source={require("../assets/editPen.png")}
@@ -151,18 +139,14 @@ const ProfileSelfScreen = () => {
               </TouchableOpacity>
             </View>
 
-            {/* ABOUT */}
             <View style={styles.aboutSection}>
-              {city ? (
-                <Text style={styles.aboutSectionText}>{city}</Text>
-              ) : null}
-              {bio ? <Text style={styles.aboutSectionText}>{bio}</Text> : null}
-              {interests ? (
+              {city && <Text style={styles.aboutSectionText}>{city}</Text>}
+              {bio && <Text style={styles.aboutSectionText}>{bio}</Text>}
+              {interests && (
                 <Text style={styles.aboutSectionText}>{interests}</Text>
-              ) : null}
+              )}
             </View>
 
-            {/* HEADER TABS */}
             <View style={styles.headerTabsRow}>
               <View style={styles.tabsContainer}>
                 <TouchableOpacity onPress={() => setActiveTab("Photos")}>
@@ -187,7 +171,6 @@ const ProfileSelfScreen = () => {
                   </Text>
                 </TouchableOpacity>
 
-                {/* MY FRIENDS TAB */}
                 <TouchableOpacity onPress={() => setActiveTab("Myfriends")}>
                   <Text
                     style={[
@@ -201,14 +184,12 @@ const ProfileSelfScreen = () => {
               </View>
             </View>
 
-            {/* PHOTOS TAB */}
             {activeTab === "Photos" && (
               <View style={{ alignItems: "center", marginTop: 20 }}>
                 <PhotoGrid photos={photos} />
               </View>
             )}
 
-            {/* TRIPS TAB */}
             {activeTab === "Trips" && (
               <FlatList
                 data={trips}
@@ -232,7 +213,6 @@ const ProfileSelfScreen = () => {
               />
             )}
 
-            {/* MY FRIENDS TAB CONTENT (empty for now) */}
             {activeTab === "Myfriends" && (
               <View style={{ alignItems: "center", marginTop: 20 }}>
                 <Text style={{ color: "white" }}>My friends list here...</Text>
