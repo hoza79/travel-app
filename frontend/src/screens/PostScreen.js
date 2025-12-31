@@ -1,5 +1,4 @@
 import {
-  StyleSheet,
   Text,
   View,
   TouchableOpacity,
@@ -10,13 +9,13 @@ import {
   TextInput,
   Image,
   FlatList,
+  Modal,
 } from "react-native";
 import React, { useState } from "react";
 import styles from "../styles/PostScreen_styles";
 import { useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import SuccessMessageBox from "../common/SuccessMessageBox";
 import { GOOGLE_API_KEY } from "@env";
 import BASE_URL from "../config/api";
 import * as ImagePicker from "expo-image-picker";
@@ -34,7 +33,6 @@ const PostScreen = () => {
   const [to, setTo] = useState("");
   const [fromSuggestions, setFromSuggestions] = useState([]);
   const [toSuggestions, setToSuggestions] = useState([]);
-
   const [photoLocationSuggestions, setPhotoLocationSuggestions] = useState([]);
 
   const [date, setDate] = useState("");
@@ -42,12 +40,13 @@ const PostScreen = () => {
   const [description, setDescription] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const [visible, setVisible] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
-
   const [location, setLocation] = useState("");
   const [photo, setPhoto] = useState(null);
+
+  // ✅ modal replaces SuccessMessageBox
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [postModalText, setPostModalText] = useState("");
+  const [navigateAfterOk, setNavigateAfterOk] = useState(false);
 
   // CLOUDINARY
   const CLOUD_NAME = "del5ajmby";
@@ -111,7 +110,6 @@ const PostScreen = () => {
     });
   };
 
-  /** FETCH GOOGLE CITY SUGGESTIONS */
   let timeouts = { from: null, to: null, photoLocation: null };
 
   const fetchSuggestions = async (query, type) => {
@@ -124,27 +122,22 @@ const PostScreen = () => {
 
     clearTimeout(timeouts[type]);
     timeouts[type] = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-            query
-          )}&key=${GOOGLE_API_KEY}&language=en&types=(cities)`
-        );
-        const data = await res.json();
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+          query
+        )}&key=${GOOGLE_API_KEY}&language=en&types=(cities)`
+      );
+      const data = await res.json();
 
-        const simplified =
-          data?.predictions?.map((item) => ({
-            id: item.place_id,
-            name: item.description,
-          })) || [];
+      const simplified =
+        data?.predictions?.map((item) => ({
+          id: item.place_id,
+          name: item.description,
+        })) || [];
 
-        if (type === "from") setFromSuggestions(simplified);
-        else if (type === "to") setToSuggestions(simplified);
-        else if (type === "photoLocation")
-          setPhotoLocationSuggestions(simplified);
-      } catch (e) {
-        console.error(`${type} fetch error:`, e);
-      }
+      if (type === "from") setFromSuggestions(simplified);
+      else if (type === "to") setToSuggestions(simplified);
+      else setPhotoLocationSuggestions(simplified);
     }, 120);
   };
 
@@ -202,7 +195,6 @@ const PostScreen = () => {
           {selectedMain === "trip" && (
             <View style={styles.tripInfoWrapper}>
               <View style={styles.tripInfo}>
-                {/* Trip type */}
                 <View style={styles.subTabInsideBox}>
                   <TouchableOpacity
                     style={[
@@ -355,10 +347,7 @@ const PostScreen = () => {
                     onChange={(event, selectedDate) => {
                       setShowDatePicker(false);
                       if (selectedDate) {
-                        const formatted = selectedDate
-                          .toISOString()
-                          .split("T")[0];
-                        setDate(formatted);
+                        setDate(selectedDate.toISOString().split("T")[0]);
                       }
                     }}
                   />
@@ -401,7 +390,6 @@ const PostScreen = () => {
                 )}
               </TouchableOpacity>
 
-              {/* LOCATION + DROPDOWN */}
               <View style={{ position: "relative", marginBottom: 10 }}>
                 <TextInput
                   placeholder="Location"
@@ -448,15 +436,15 @@ const PostScreen = () => {
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
 
+      {/* POST BUTTON */}
       <TouchableOpacity
         style={styles.postButton}
         onPress={async () => {
           if (selectedMain === "photo") {
-            handlePhotoPost();
-            setMessageType("success");
-            setMessage("Photo selected. Cloudinary next.");
-            setVisible(true);
-            setTimeout(() => setVisible(false), 2000);
+            await handlePhotoPost();
+            setPostModalText("Photo posted successfully");
+            setNavigateAfterOk(true);
+            setShowPostModal(true);
             return;
           }
 
@@ -481,22 +469,16 @@ const PostScreen = () => {
             });
 
             const data = await response.json();
-            const messageText = Array.isArray(data.message)
-              ? data.message[0]
-              : data.message;
 
             if (response.ok) {
-              setMessageType("success");
-              setMessage(messageText);
-              setVisible(true);
-              setTimeout(() => setVisible(false), 3000);
-              setTimeout(() => navigation.replace("BottomNavigator"), 3000);
+              setPostModalText("Trip posted successfully");
+              setNavigateAfterOk(true);
             } else {
-              setMessageType("error");
-              setMessage(messageText);
-              setVisible(true);
-              setTimeout(() => setVisible(false), 2000);
+              setPostModalText(data?.message || "Something went wrong");
+              setNavigateAfterOk(false);
             }
+
+            setShowPostModal(true);
           } catch (e) {
             console.error("POST error:", e);
           }
@@ -505,7 +487,26 @@ const PostScreen = () => {
         <Text style={styles.buttonText}>Post</Text>
       </TouchableOpacity>
 
-      {visible && <SuccessMessageBox text={message} type={messageType} />}
+      {/* SUCCESS MODAL */}
+      <Modal transparent visible={showPostModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>{postModalText}</Text>
+            <TouchableOpacity
+              style={styles.modalDeleteButton}
+              onPress={() => {
+                setShowPostModal(false);
+                if (navigateAfterOk) {
+                  setNavigateAfterOk(false);
+                  navigation.replace("BottomNavigator");
+                }
+              }}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

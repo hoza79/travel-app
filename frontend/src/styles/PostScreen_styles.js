@@ -125,7 +125,6 @@ export default StyleSheet.create({
     elevation: 6,
   },
 
-  /** NEW — PERFECTLY ALIGNED PHOTO LOCATION DROPDOWN */
   photoDropdown: {
     position: "absolute",
     backgroundColor: "#061237",
@@ -193,6 +192,7 @@ export default StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.06)",
   },
+
   uploadBox: {
     width: "100%",
     height: 140,
@@ -215,7 +215,11 @@ export default StyleSheet.create({
     fontSize: 17,
     fontWeight: "500",
   },
-  uploadHint: { color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 4 },
+  uploadHint: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+    marginTop: 4,
+  },
 
   textInputPhoto: {
     width: "100%",
@@ -225,8 +229,8 @@ export default StyleSheet.create({
     borderBottomWidth: 0.2,
     borderColor: "rgba(255,255,255,0.15)",
     marginBottom: 15,
-    textAlign: "left", // ✅ Forces the text to start on the left
-    paddingLeft: 0, // ✅ Make sure no unwanted left padding exists
+    textAlign: "left",
+    paddingLeft: 0,
   },
 
   descriptionPhotoInput: {
@@ -254,5 +258,50 @@ export default StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     alignSelf: "center",
   },
-  buttonText: { color: "white", fontSize: 19, fontWeight: "600" },
+  buttonText: {
+    color: "white",
+    fontSize: 19,
+    fontWeight: "600",
+  },
+
+  /* ============================= */
+  /* POST SUCCESS MODAL            */
+  /* ============================= */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalContainer: {
+    width: "75%",
+    backgroundColor: "#061237",
+    borderRadius: 18,
+    paddingVertical: 25,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+
+  modalTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+
+  modalDeleteButton: {
+    width: "70%",
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#020d2d",
+    alignItems: "center",
+  },
+
+  modalButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 });

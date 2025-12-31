@@ -229,7 +229,7 @@ const TravelCard = ({
   }
 
   const [avatarSource, setAvatarSource] = useState(
-    require("../assets/profile-picture.jpeg")
+    require("../assets/avatar.png")
   );
 
   useEffect(() => {
