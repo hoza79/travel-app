@@ -29,7 +29,6 @@ const ChatScreen = ({ route, navigation }) => {
   const scrollViewRef = useRef(null);
   const [currentUserId, setCurrentUserId] = useState(null);
 
-  // ACTIVATE CHAT + MARK READ WHEN LEAVING
   useEffect(() => {
     setActiveConversation(conversationId);
 
@@ -48,7 +47,6 @@ const ChatScreen = ({ route, navigation }) => {
     };
   }, [currentUserId]);
 
-  // LOAD USER ID
   useEffect(() => {
     const load = async () => {
       const id = await AsyncStorage.getItem("userId");
@@ -57,7 +55,6 @@ const ChatScreen = ({ route, navigation }) => {
     load();
   }, []);
 
-  // FETCH MESSAGES
   const fetchMessages = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -75,7 +72,6 @@ const ChatScreen = ({ route, navigation }) => {
     } catch {}
   };
 
-  // MARK AS READ IMMEDIATELY
   const markAsRead = (uid) => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -92,7 +88,6 @@ const ChatScreen = ({ route, navigation }) => {
     markAsRead(currentUserId);
   }, [currentUserId]);
 
-  // SOCKET LISTENER
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -112,7 +107,6 @@ const ChatScreen = ({ route, navigation }) => {
     });
   }, []);
 
-  // SEND MESSAGE
   const send = () => {
     if (!text.trim() || !currentUserId) return;
 
@@ -139,7 +133,6 @@ const ChatScreen = ({ route, navigation }) => {
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* ⭐ HEADER TOUCHABLE → OPEN PROFILE */}
         <TouchableOpacity
           style={styles.header}
           onPress={() => {

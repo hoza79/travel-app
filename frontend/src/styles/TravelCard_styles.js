@@ -1,9 +1,6 @@
 import { StyleSheet } from "react-native";
 
 export default StyleSheet.create({
-  /* ============================= */
-  /* MAIN CARD CONTAINER           */
-  /* ============================= */
   container: {
     width: "90%",
     alignSelf: "center",
@@ -20,10 +17,6 @@ export default StyleSheet.create({
     shadowRadius: 15,
     elevation: 10,
   },
-
-  /* ============================= */
-  /* HEADER                        */
-  /* ============================= */
   rowCenter: {
     flexDirection: "row",
     alignItems: "center",
@@ -71,9 +64,6 @@ export default StyleSheet.create({
     fontWeight: "700",
   },
 
-  /* ============================= */
-  /* LOGO + DISTANCE               */
-  /* ============================= */
   logoContainer: {
     position: "absolute",
     top: -25,
@@ -96,9 +86,6 @@ export default StyleSheet.create({
     marginRight: 8,
   },
 
-  /* ============================= */
-  /* DESTINATION SECTION           */
-  /* ============================= */
   destination: {
     marginTop: 25,
     marginBottom: 25,
@@ -120,9 +107,6 @@ export default StyleSheet.create({
     marginTop: 3,
   },
 
-  /* ============================= */
-  /* DESCRIPTION                   */
-  /* ============================= */
   descriptionContainer: {
     width: "100%",
   },
@@ -133,9 +117,6 @@ export default StyleSheet.create({
     lineHeight: 22,
   },
 
-  /* ============================= */
-  /* FOOTER                        */
-  /* ============================= */
   footer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -148,9 +129,6 @@ export default StyleSheet.create({
     fontSize: 14,
   },
 
-  /* ============================= */
-  /* DELETE TRIP BUTTON (OWNER)   */
-  /* ============================= */
   deleteTripButton: {
     backgroundColor: "white",
     paddingVertical: 10,
@@ -166,9 +144,6 @@ export default StyleSheet.create({
     fontSize: 16,
   },
 
-  /* ============================= */
-  /* FULL BADGE                    */
-  /* ============================= */
   fullBadge: {
     backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: 18,
@@ -189,9 +164,6 @@ export default StyleSheet.create({
     fontSize: 16,
   },
 
-  /* ============================= */
-  /* ACTION BUTTON (Interest etc.) */
-  /* ============================= */
   actionButton: {
     backgroundColor: "#F2F2F2",
     paddingVertical: 10,
@@ -214,9 +186,6 @@ export default StyleSheet.create({
     opacity: 0.6,
   },
 
-  /* ============================= */
-  /* ACCEPT / REJECT BUTTONS       */
-  /* ============================= */
   acceptRejectRow: {
     flexDirection: "row",
     gap: 14,
@@ -249,9 +218,6 @@ export default StyleSheet.create({
     marginTop: -2,
   },
 
-  /* ================================= */
-  /* ACCEPTED MESSAGE BUTTON            */
-  /* ================================= */
   acceptedMessageButton: {
     backgroundColor: "white",
     opacity: 1,
@@ -269,9 +235,6 @@ export default StyleSheet.create({
     fontSize: 16,
   },
 
-  /* ============================= */
-  /* DELETE MODAL                  */
-  /* ============================= */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

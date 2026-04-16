@@ -24,6 +24,17 @@ export class PostService {
     const from_location = await getCoordinates(from);
     const to_location = await getCoordinates(to);
 
+    if (!from_location) {
+      throw new BadRequestException(
+        `Could not find coordinates for: "${from}". Please check the spelling.`,
+      );
+    }
+    if (!to_location) {
+      throw new BadRequestException(
+        `Could not find coordinates for: "${to}". Please check the spelling.`,
+      );
+    }
+
     const from_lat = from_location.lat;
     const from_lng = from_location.lng;
     const to_lat = to_location.lat;
@@ -85,28 +96,66 @@ export class PostService {
     }
   }
 
-  async findNearby(userLat: number, userLng: number) {
+  async findNearby(
+    userLat: number,
+
+    userLng: number,
+
+    searchTerm?: string,
+
+    offset: number = 0,
+  ) {
     try {
-      const [rows] = await this.db.query(
-        `SELECT 
-          trips.*, 
+      const limit = 100;
+
+      let sql = `
+
+          SELECT
+
+          trips.*,
+
           users.first_name,
+
           users.profile_photo,
+
           (6371 * acos(
-            cos(radians(?)) *
-            cos(radians(origin_lat)) *
-            cos(radians(origin_lng) - radians(?)) +
-            sin(radians(?)) *
-            sin(radians(origin_lat))
+
+          cos(radians(?)) *
+
+          cos(radians(origin_lat)) *
+
+          cos(radians(origin_lng) - radians(?)) +
+
+          sin(radians(?)) *
+
+          sin(radians(origin_lat))
+
           )) AS distance
-        FROM trips
-        JOIN users ON trips.creator_id = users.id
-        ORDER BY distance ASC`,
-        [userLat, userLng, userLat],
-      );
+
+          FROM trips
+
+          JOIN users ON trips.creator_id = users.id
+
+          `;
+
+      const params: any[] = [userLat, userLng, userLat];
+
+      if (searchTerm && searchTerm.trim() !== '') {
+        sql += ` WHERE (origin LIKE ? OR destination LIKE ?) `;
+
+        params.push(`%${searchTerm}%`, `%${searchTerm}%`);
+      }
+
+      sql += ` ORDER BY distance ASC LIMIT ? OFFSET ?`;
+
+      params.push(limit, offset);
+
+      const [rows] = await this.db.query(sql, params);
+
       return rows;
     } catch (error) {
       console.error('❌ Database Error (findNearby):', error);
+
       throw error;
     }
   }
@@ -184,9 +233,6 @@ export class PostService {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // ⭐ DELETE TRIP
-  // ---------------------------------------------------------------------
   async delete(tripId: number, userId: number) {
     try {
       const [rows]: any = await this.db.query(
@@ -209,7 +255,6 @@ export class PostService {
       await this.db.query('DELETE FROM interest_requests WHERE trip_id = ?', [
         tripId,
       ]);
-
       await this.db.query('DELETE FROM trips WHERE id = ?', [tripId]);
 
       this.notificationsGateway.sendTripDeleted(tripId);
@@ -221,9 +266,6 @@ export class PostService {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // ⭐ CREATE PHOTO
-  // ---------------------------------------------------------------------
   async createPhoto(createPhotoDto: CreatePhotoDto, userId: number) {
     const { photo_url, location, description } = createPhotoDto;
 
@@ -252,9 +294,6 @@ export class PostService {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // ⭐ GET ALL PHOTOS
-  // ---------------------------------------------------------------------
   async getAllPhotos(userLat?: number, userLng?: number) {
     try {
       if (!userLat || !userLng) {
@@ -308,9 +347,6 @@ export class PostService {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // ⭐ GET PHOTOS BY USER
-  // ---------------------------------------------------------------------
   async getPhotosByUser(userId: number) {
     try {
       const [data] = await this.db.query(
@@ -333,9 +369,6 @@ export class PostService {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // ⭐ DELETE PHOTO — NOW BROADCASTS REALTIME
-  // ---------------------------------------------------------------------
   async deletePhoto(photoId: number, userId: number) {
     try {
       const [rows]: any = await this.db.query(

@@ -6,10 +6,6 @@ import BASE_URL from "../config/api";
 let socket = null;
 let readyCallbacks = [];
 
-/**
- * Track which chat the user is currently viewing.
- * null = user is NOT inside a ChatScreen
- */
 export let activeChatId = null;
 export const setActiveChat = (id) => {
   activeChatId = id;
@@ -17,10 +13,6 @@ export const setActiveChat = (id) => {
 
 let notifyCallbacks = [];
 
-/**
- * Screens (MessagesScreen, tab badges, etc.) can subscribe
- * to "message arrived for other conversations"
- */
 export const onNotify = (cb) => {
   notifyCallbacks.push(cb);
 };
@@ -66,7 +58,6 @@ export const connectSocket = async () => {
       console.log("APP SOCKET DISCONNECTED:", reason);
     });
 
-    // -------- NEW: notification handler --------
     socket.on("newMessage", (msg) => {
       // If the message belongs to another conversation → notify
       if (msg.conversationId !== activeChatId) {

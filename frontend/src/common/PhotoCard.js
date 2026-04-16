@@ -130,7 +130,6 @@ const PhotoCard = ({
         <Text style={styles.footerText}>Shared recently</Text>
       </View>
 
-      {/* UNIFIED DELETE MODAL (same as TravelCard) */}
       <Modal transparent visible={showModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>

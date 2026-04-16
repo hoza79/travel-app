@@ -46,7 +46,6 @@ const LoginScreen = ({ navigation }) => {
           routes: [{ name: "BottomNavigator" }],
         });
       } else {
-        // ✅ SHOW ONLY FIRST ERROR (REGISTER-LIKE BEHAVIOR)
         let errorMessage = "Login failed";
 
         if (Array.isArray(data.message) && data.message.length > 0) {

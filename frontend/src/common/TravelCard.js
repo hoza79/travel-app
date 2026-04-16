@@ -80,7 +80,7 @@ const TravelCard = ({
   const fetchAcceptedCount = async () => {
     try {
       const res = await fetch(
-        `${BASE_URL}/interest_requests/accepted_count/${tripId}`
+        `${BASE_URL}/interest_requests/accepted_count/${tripId}`,
       );
       const data = await res.json();
       const count = data?.accepted ?? 0;
@@ -103,7 +103,7 @@ const TravelCard = ({
 
         const res = await fetch(
           `${BASE_URL}/interest_requests/status/${tripId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { headers: { Authorization: `Bearer ${token}` } },
         );
 
         const data = await res.json();
@@ -229,7 +229,7 @@ const TravelCard = ({
   }
 
   const [avatarSource, setAvatarSource] = useState(
-    require("../assets/avatar.png")
+    require("../assets/avatar.png"),
   );
 
   useEffect(() => {
@@ -260,8 +260,8 @@ const TravelCard = ({
     status === null
       ? "Interested"
       : status === "pending"
-      ? "Pending"
-      : "Send Message";
+        ? "Pending"
+        : "Send Message";
 
   const chatUserId = creatorId;
   const chatUserName = firstName;
@@ -419,7 +419,7 @@ const TravelCard = ({
                           "Content-Type": "application/json",
                           Authorization: `Bearer ${token}`,
                         },
-                      }
+                      },
                     );
                     setStatus("accepted");
                     fetchAcceptedCount();
@@ -437,7 +437,7 @@ const TravelCard = ({
                       {
                         method: "DELETE",
                         headers: { Authorization: `Bearer ${token}` },
-                      }
+                      },
                     );
                     setStatus("rejected");
                     setIsFull(true);
@@ -485,7 +485,6 @@ const TravelCard = ({
         </View>
       </TouchableOpacity>
 
-      {/* DELETE CONFIRMATION MODAL */}
       <Modal transparent visible={showModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>

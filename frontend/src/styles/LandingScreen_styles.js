@@ -3,7 +3,6 @@ import { moderateScale } from "react-native-size-matters";
 
 const { width, height } = Dimensions.get("window");
 
-// Base design device (iPhone 16 width ≈ 430)
 const BASE_WIDTH = 430;
 const widthRatio = width / BASE_WIDTH;
 

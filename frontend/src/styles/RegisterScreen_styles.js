@@ -60,10 +60,6 @@ export default StyleSheet.create({
     fontSize: 17,
   },
 
-  /* ============================= */
-  /* MODAL (copied from TravelCard) */
-  /* ============================= */
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

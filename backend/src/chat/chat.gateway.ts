@@ -54,7 +54,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { conversationId, sender_id, receiver_id, message_text } = message;
 
-    // SAVE MESSAGE
     await this.db.query(
       `
       INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, sent_at, is_read)
@@ -63,7 +62,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       [conversationId, sender_id, receiver_id, message_text],
     );
 
-    // UNDELETE FOR BOTH USERS
     await this.db.query(
       `
       DELETE FROM conversation_deleted
@@ -81,16 +79,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       sent_at: new Date(),
     };
 
-    // EMIT
     const receiverSocket = this.clients.get(receiver_id);
     if (receiverSocket) {
       this.server.to(receiverSocket).emit('newMessage', payload);
     }
     client.emit('newMessage', payload);
 
-    // -----------------------------------------
-    // FETCH DELETED_AT FOR BOTH USERS
-    // -----------------------------------------
     const [[delSender]]: any = await this.db.query(
       `
       SELECT deleted_at 
@@ -115,10 +109,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const senderDeletedAt = delSender?.deleted_at || null;
     const receiverDeletedAt = delReceiver?.deleted_at || null;
-
-    // -----------------------------------------
-    // PREVIEW QUERY WITH FILTER
-    // -----------------------------------------
     const previewSQL = `
       SELECT 
         c.id AS conversationId,
@@ -175,7 +165,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const senderPreview = senderRows[0];
 
-    // RECEIVER PREVIEW
     const [receiverRows]: any = await this.db.query(previewSQL, [
       receiverDeletedAt,
       receiverDeletedAt,
@@ -218,7 +207,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       [conversationId, userId],
     );
 
-    // FETCH DELETED_AT
     const [[del]]: any = await this.db.query(
       `
       SELECT deleted_at 

@@ -92,7 +92,7 @@ export default StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
-    marginTop: 35, // increased for breathing room
+    marginTop: 35,
     alignSelf: "center",
     marginBottom: 10,
   },
@@ -100,7 +100,7 @@ export default StyleSheet.create({
   tabsContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 60, // more space between Photos & Trips
+    gap: 60,
   },
 
   headerText: {
@@ -109,7 +109,7 @@ export default StyleSheet.create({
     fontWeight: "600",
     opacity: 0.8,
     paddingBottom: 4,
-    paddingTop: 3, // helps align vertically with the button
+    paddingTop: 3,
   },
 
   activeTabText: {
@@ -125,7 +125,7 @@ export default StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#0e121e",
     borderRadius: 22,
-    paddingVertical: 10, // more height
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: "#1c2448",

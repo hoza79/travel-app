@@ -20,7 +20,6 @@ export class MessagesService {
   }
 
   async getMessages(userId: number, conversationId: number) {
-    // get deleted_at for THIS user
     const [[del]]: any = await this.db.query(
       `
       SELECT deleted_at

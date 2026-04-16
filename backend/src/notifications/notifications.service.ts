@@ -35,7 +35,6 @@ export class NotificationsService {
 
     const insertedId = res.insertId;
 
-    // ⭐ UPDATED — return first + last name
     const [[notif]]: any = await this.db.query(
       `
         SELECT 
@@ -65,7 +64,6 @@ export class NotificationsService {
     return notif;
   }
 
-  // unread (badge)
   async findUnread(receiverId: number) {
     const [rows]: any = await this.db.query(
       `
@@ -92,7 +90,6 @@ export class NotificationsService {
     }));
   }
 
-  // full list (screen)
   async findAll(receiverId: number) {
     const [rows]: any = await this.db.query(
       `

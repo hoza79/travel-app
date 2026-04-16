@@ -29,69 +29,26 @@ export class InterestRequestsService {
   async create(dto: CreateInterestRequestDto, requesterId: number) {
     const { tripId, ownerId } = dto;
 
-    if (ownerId === requesterId) {
-      throw new BadRequestException('Cannot request your own trip');
+    try {
+      const [result]: any = await this.db.query(
+        `INSERT INTO interest_requests (trip_id, requester_id, owner_id, status) VALUES (?, ?, ?, 'pending')`,
+        [tripId, requesterId, ownerId],
+      );
+
+      return { message: 'Skapad', id: result.insertId };
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        throw new BadRequestException('Redan anmäld');
+      }
+      throw error;
     }
-
-    const acceptedCount = (await this.getAcceptedCount(tripId)).accepted;
-
-    const [[trip]]: any = await this.db.query(
-      `SELECT available_seats FROM trips WHERE id = ?`,
-      [tripId],
-    );
-
-    if (!trip) throw new BadRequestException('Trip not found');
-
-    if (acceptedCount >= trip.available_seats) {
-      throw new BadRequestException('This trip is full');
-    }
-
-    const [existingRows]: any = await this.db.query(
-      `SELECT id, status FROM interest_requests WHERE trip_id = ? AND requester_id = ? LIMIT 1`,
-      [tripId, requesterId],
-    );
-
-    if (existingRows && existingRows.length > 0) {
-      const existing = existingRows[0];
-      return { status: existing.status, interestRequestId: existing.id };
-    }
-
-    const [result]: any = await this.db.query(
-      `
-      INSERT INTO interest_requests (trip_id, requester_id, owner_id, status)
-      VALUES (?, ?, ?, 'pending')
-      `,
-      [tripId, requesterId, ownerId],
-    );
-
-    const interestRequestId = result.insertId;
-
-    if (ownerId !== requesterId) {
-      await this.notificationsService.create({
-        receiverId: ownerId,
-        senderId: requesterId,
-        tripId,
-        type: 'interest_request',
-        message: 'Wants to join your trip',
-        interestRequestId,
-      });
-    }
-
-    return { status: 'pending', interestRequestId };
   }
-
   async getStatus(tripId: number, requesterId: number) {
     const [rows]: any = await this.db.query(
-      `
-      SELECT status FROM interest_requests
-      WHERE trip_id = ? AND requester_id = ?
-      LIMIT 1
-      `,
+      `SELECT status FROM interest_requests WHERE trip_id = ? AND requester_id = ? LIMIT 1`,
       [tripId, requesterId],
     );
-
-    if (rows.length === 0) return { status: null };
-    return { status: rows[0].status };
+    return rows.length === 0 ? { status: null } : { status: rows[0].status };
   }
 
   async acceptRequest(id: number, ownerId: number) {

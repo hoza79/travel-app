@@ -48,7 +48,6 @@ export const NotificationProvider = ({ children }) => {
     initSocketSafely();
   }, []);
 
-  // Re-identify on resume
   useEffect(() => {
     const sub = AppState.addEventListener("change", async (state) => {
       if (state === "active") {
@@ -62,7 +61,6 @@ export const NotificationProvider = ({ children }) => {
     return () => sub.remove();
   }, []);
 
-  // FIX: attach socket listeners only ONCE
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();

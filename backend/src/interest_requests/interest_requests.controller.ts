@@ -55,7 +55,6 @@ export class InterestRequestsController {
     return this.interestRequestsService.remove(+id);
   }
 
-  // ⭐ NEW ENDPOINT — used by TravelCard to check if trip is full
   @Get('accepted_count/:tripId')
   getAcceptedCount(@Param('tripId') tripId: string) {
     return this.interestRequestsService.getAcceptedCount(+tripId);

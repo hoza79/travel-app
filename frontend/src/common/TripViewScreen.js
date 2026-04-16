@@ -7,10 +7,9 @@ import BASE_URL from "../config/api";
 export default function TripViewScreen({ route }) {
   const tripId = route?.params?.tripId;
 
-  // 🔥 FIX: Prevent NaN / undefined crash
   if (!tripId) {
     console.log(
-      "❌ TripViewScreen opened WITHOUT tripId → preventing NaN fetch"
+      "❌ TripViewScreen opened WITHOUT tripId → preventing NaN fetch",
     );
     return (
       <View
@@ -37,19 +36,17 @@ export default function TripViewScreen({ route }) {
       try {
         const token = await AsyncStorage.getItem("token");
 
-        // LOAD TRIP
         const res = await fetch(`${BASE_URL}/post/${tripId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const tripData = await res.json();
         setTrip(tripData);
 
-        // LOAD INTEREST STATUS
         const sRes = await fetch(
           `${BASE_URL}/interest_requests/status/${tripId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
-          }
+          },
         );
         const sData = await sRes.json();
         setStatus(sData.status || null);

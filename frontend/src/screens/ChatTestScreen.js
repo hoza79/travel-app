@@ -23,7 +23,6 @@ export default function ChatTestScreen() {
       const numericId = Number(id);
       setUserId(numericId);
 
-      // Automatic receiver logic
       if (numericId === 7) setReceiverId(15);
       else if (numericId === 15) setReceiverId(7);
       else setReceiverId(7);
@@ -32,14 +31,12 @@ export default function ChatTestScreen() {
   }, []);
 
   useEffect(() => {
-    // Ensure the shared socket exists and listen on it
     connectSocket().catch(() => {});
 
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
-      // prevent duplicate handlers on hot reload by cleaning existing named handler
       try {
         if (socket.__chat_handler) {
           socket.off("newMessage", socket.__chat_handler);
@@ -53,8 +50,6 @@ export default function ChatTestScreen() {
       socket.on("newMessage", handler);
       socket.__chat_handler = handler;
     });
-
-    // no local socket to disconnect; shared socket lives for app lifecycle
   }, []);
 
   const sendMessage = async () => {
@@ -73,7 +68,6 @@ export default function ChatTestScreen() {
     if (socket && socket.connected) {
       socket.emit("sendMessage", message);
     } else {
-      // fallback: POST to server (optional)
       try {
         await fetch(`${BASE_URL}/messages`, {
           method: "POST",

@@ -50,7 +50,7 @@ const CompleteProfileScreen = ({ navigation }) => {
 
     const res = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      { method: "POST", body: data }
+      { method: "POST", body: data },
     );
 
     const result = await res.json();
@@ -58,7 +58,6 @@ const CompleteProfileScreen = ({ navigation }) => {
   };
 
   const handleContinue = async () => {
-    // FRONTEND VALIDATION (ORDERED)
     if (!city.trim()) {
       setMessage("City is required");
       setShowModal(true);
@@ -162,7 +161,6 @@ const CompleteProfileScreen = ({ navigation }) => {
         <Text style={styles.buttonText}>Continue</Text>
       </TouchableOpacity>
 
-      {/* ✅ CORRECT APP-WIDE MODAL */}
       <Modal transparent visible={showModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>

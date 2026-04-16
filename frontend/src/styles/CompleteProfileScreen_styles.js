@@ -71,8 +71,6 @@ export default StyleSheet.create({
     fontWeight: "600",
   },
 
-  /* ✅ APP-WIDE MODAL STYLE (MATCHES TravelCard) */
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

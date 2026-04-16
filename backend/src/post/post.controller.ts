@@ -30,20 +30,27 @@ export class PostController {
     return this.postService.findAll();
   }
 
-  // ---------- STATIC ROUTES ----------
   @Get('nearby')
-  findNearby(@Query('lat') lat?: string, @Query('lng') lng?: string) {
-    const parsedLat = lat ? Number(lat) : undefined;
-    const parsedLng = lng ? Number(lng) : undefined;
+  findNearby(
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('search') search?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLat = lat ? Number(lat) : 0;
+    const parsedLng = lng ? Number(lng) : 0;
+    const parsedOffset = offset ? Number(offset) : 0;
 
-    if (lat && Number.isNaN(parsedLat)) {
-      throw new BadRequestException('lat must be a valid number');
-    }
-    if (lng && Number.isNaN(parsedLng)) {
-      throw new BadRequestException('lng must be a valid number');
+    if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
+      throw new BadRequestException('Coordinates must be valid numbers');
     }
 
-    return this.postService.findNearby(parsedLat ?? 0, parsedLng ?? 0);
+    return this.postService.findNearby(
+      parsedLat,
+      parsedLng,
+      search,
+      parsedOffset,
+    );
   }
 
   @Get('user/:id')
@@ -56,7 +63,6 @@ export class PostController {
     return this.postService.findMyTrips(verifyToken(req));
   }
 
-  // ---------- PHOTOS ----------
   @Post('photo')
   createPhoto(@Req() req, @Body() dto: CreatePhotoDto) {
     return this.postService.createPhoto(dto, verifyToken(req));
@@ -75,7 +81,6 @@ export class PostController {
     return this.postService.getPhotosByUser(Number(userId));
   }
 
-  // ---------- DELETE PHOTO ----------
   @Delete('photo/:photoId')
   deletePhoto(@Req() req, @Param('photoId') photoId: string) {
     const userId = verifyToken(req);
@@ -86,7 +91,6 @@ export class PostController {
     return this.postService.deletePhoto(parsed, userId);
   }
 
-  // ---------- DELETE TRIP ----------
   @Delete(':id')
   delete(@Req() req, @Param('id') id: string) {
     const userId = verifyToken(req);
@@ -97,7 +101,6 @@ export class PostController {
     return this.postService.delete(parsed, userId);
   }
 
-  // ---------- FIND TRIP ----------
   @Get(':id')
   findOne(@Param('id') id: string) {
     const parsed = Number(id);

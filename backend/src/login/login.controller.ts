@@ -32,7 +32,7 @@ export class LoginController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateLoginDto: UpdateLoginDto) {
-    return this.loginService.update(+id, updateLoginDto);
+    return this.loginService.update(+id);
   }
 
   @Delete(':id')

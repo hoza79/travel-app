@@ -161,7 +161,6 @@ export default function NotificationsScreen() {
                     <Text style={styles.message}>{n.message}</Text>
                   </View>
 
-                  {/* ⭐ HIDE DATE FOR INTEREST REQUESTS ⭐ */}
                   {n.type !== "interest_request" && (
                     <View style={styles.timeColumn}>
                       <Text style={styles.dateText}>{formattedDate}</Text>
@@ -184,7 +183,7 @@ export default function NotificationsScreen() {
                                 "Content-Type": "application/json",
                                 Authorization: `Bearer ${token}`,
                               },
-                            }
+                            },
                           );
                           load();
                           setUnreadCount((prev) => Math.max(prev - 1, 0));
@@ -204,7 +203,7 @@ export default function NotificationsScreen() {
                             {
                               method: "DELETE",
                               headers: { Authorization: `Bearer ${token}` },
-                            }
+                            },
                           );
                         } catch {}
 

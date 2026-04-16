@@ -79,7 +79,7 @@ const PostScreen = () => {
 
     const res = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      { method: "POST", body: data }
+      { method: "POST", body: data },
     );
 
     const result = await res.json();
@@ -124,8 +124,8 @@ const PostScreen = () => {
     timeouts[type] = setTimeout(async () => {
       const res = await fetch(
         `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-          query
-        )}&key=${GOOGLE_API_KEY}&language=en&types=(cities)`
+          query,
+        )}&key=${GOOGLE_API_KEY}&language=en&types=(cities)`,
       );
       const data = await res.json();
 
@@ -185,13 +185,11 @@ const PostScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* INPUTS */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView
           style={styles.keyboardContainer}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {/* TRIP MODE */}
           {selectedMain === "trip" && (
             <View style={styles.tripInfoWrapper}>
               <View style={styles.tripInfo}>
@@ -270,7 +268,6 @@ const PostScreen = () => {
                   )}
                 </View>
 
-                {/* TO */}
                 <View style={{ position: "relative", marginBottom: 10 }}>
                   <View style={styles.inputContainer}>
                     <Image
@@ -309,7 +306,6 @@ const PostScreen = () => {
                   )}
                 </View>
 
-                {/* DATE + SEATS */}
                 <View style={styles.dateAndSeatsContainer}>
                   <View style={styles.dateAndIcon}>
                     <TouchableOpacity onPress={() => setShowDatePicker(true)}>
@@ -367,7 +363,6 @@ const PostScreen = () => {
             </View>
           )}
 
-          {/* PHOTO MODE */}
           {selectedMain === "photo" && (
             <View style={styles.photoContainer}>
               <TouchableOpacity style={styles.uploadBox} onPress={pickImage}>
@@ -436,7 +431,6 @@ const PostScreen = () => {
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
 
-      {/* POST BUTTON */}
       <TouchableOpacity
         style={styles.postButton}
         onPress={async () => {
@@ -487,7 +481,6 @@ const PostScreen = () => {
         <Text style={styles.buttonText}>Post</Text>
       </TouchableOpacity>
 
-      {/* SUCCESS MODAL */}
       <Modal transparent visible={showPostModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>

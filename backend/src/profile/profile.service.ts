@@ -5,11 +5,6 @@ import type { Pool } from 'mysql2/promise';
 export class ProfileService {
   constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
 
-  /**
-   * Returns user profile by user id.
-   * Selected fields: id, first_name, last_name, bio, city, interests,
-   * age, profile_photo, cover_photo
-   */
   async getProfileByUserId(userId: number) {
     if (!userId || isNaN(userId)) {
       throw new NotFoundException('User not found');

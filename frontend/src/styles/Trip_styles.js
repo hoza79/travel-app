@@ -3,7 +3,7 @@ import { scale, verticalScale, moderateScale } from "react-native-size-matters";
 
 export default StyleSheet.create({
   container: {
-    width: "90%", // match TravelCard
+    width: "90%",
     alignSelf: "center",
     marginVertical: 15,
     borderRadius: 28,

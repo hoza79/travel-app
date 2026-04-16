@@ -40,7 +40,7 @@ export const MessageProvider = ({ children }) => {
 
       const totalUnread = list.reduce(
         (sum, c) => sum + (c.unreadCount || 0),
-        0
+        0,
       );
 
       if (mountedRef.current) {
@@ -51,12 +51,10 @@ export const MessageProvider = ({ children }) => {
     }
   };
 
-  // initial load
   useEffect(() => {
     recalcUnread();
   }, []);
 
-  // listen to socket updates and recompute unread from server truth
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();

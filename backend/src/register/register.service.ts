@@ -38,7 +38,6 @@ export class RegisterService {
         },
       };
     } catch (error: any) {
-      // ✅ HANDLE DUPLICATE EMAIL (MySQL)
       if (error?.code === 'ER_DUP_ENTRY' || error?.errno === 1062) {
         throw new ConflictException('User already exists');
       }

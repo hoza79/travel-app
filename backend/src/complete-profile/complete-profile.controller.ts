@@ -10,10 +10,8 @@ export class CompleteProfileController {
 
   @Post('setup')
   async setup(@Req() req, @Body() dto: CreateCompleteProfileDto) {
-    // You pass the token manually, so extract userId from request header manually:
     const token = req.headers.authorization?.split(' ')[1];
 
-    // decode token (VERY light decoding, same as your login/register do)
     const payload = JSON.parse(
       Buffer.from(token.split('.')[1], 'base64').toString(),
     );

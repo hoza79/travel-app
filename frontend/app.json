@@ -14,11 +14,12 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.hosam7.frontend",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow CatchMe to access your location to show nearby trips.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow CatchMe to access your location to improve trip suggestions and nearby travel features.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "bundleIdentifier": "com.hosam7.frontend"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,7 +38,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow CatchMe to access your location even when the app is open to show nearby trips.",
+          "locationAlwaysAndWhenInUsePermission": "Allow CatchMe to access your location to enhance trip discovery and nearby features.",
           "locationWhenInUsePermission": "Allow CatchMe to access your location to find nearby trips while you use the app."
         }
       ]

@@ -22,7 +22,6 @@ const RegisterScreen = ({ navigation }) => {
   const [password, setPassword] = useState("");
   const [confirmedPassword, setConfirmedPassword] = useState("");
 
-  // ✅ session-only flag (resets on reload)
   const [hasRegisteredThisSession, setHasRegisteredThisSession] =
     useState(false);
 
@@ -31,7 +30,6 @@ const RegisterScreen = ({ navigation }) => {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const handleRegister = async () => {
-    // ✅ User already registered in THIS session → just continue
     if (hasRegisteredThisSession) {
       navigation.navigate("CompleteProfileScreen");
       return;
@@ -62,7 +60,6 @@ const RegisterScreen = ({ navigation }) => {
           await AsyncStorage.setItem("userId", data.user.id.toString());
         }
 
-        // ✅ mark only THIS session as registered
         setHasRegisteredThisSession(true);
 
         setMessage(messageText);

@@ -176,7 +176,7 @@ const BottomNavigator = () => {
 
       <Tab.Screen
         name="Profile"
-        component={ProfileSelfScreen} // ⭐ FIX — always YOUR profile
+        component={ProfileSelfScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <Image

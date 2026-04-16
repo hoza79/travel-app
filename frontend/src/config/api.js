@@ -1,3 +1,3 @@
-const BASE_URL = "https://comeatable-aerobically-lucile.ngrok-free.dev";
+const BASE_URL = "https://causal-trustless-levitate.ngrok-free.dev";
 
 export default BASE_URL;

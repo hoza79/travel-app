@@ -31,15 +31,18 @@ const HomeScreen = () => {
   const handlePhotoDeleted = (deletedPhotoId) => {
     setItems((prev) => prev.filter((item) => item.id !== deletedPhotoId));
     setFilteredItems((prev) =>
-      prev.filter((item) => item.id !== deletedPhotoId)
+      prev.filter((item) => item.id !== deletedPhotoId),
     );
   };
 
-  const fetchAll = async (lat, lng) => {
+  const fetchAll = async (lat, lng, searchTerm = "") => {
     try {
+      const tripsUrl = `${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}&search=${searchTerm}&limit=100`;
+      const photosUrl = `${BASE_URL}/post/photos?lat=${lat}&lng=${lng}&search=${searchTerm}`;
+
       const [tripsRes, photosRes] = await Promise.all([
-        fetch(`${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}`),
-        fetch(`${BASE_URL}/post/photos?lat=${lat}&lng=${lng}`),
+        fetch(tripsUrl),
+        fetch(photosUrl),
       ]);
 
       const trips = await tripsRes.json().catch(() => []);
@@ -55,7 +58,6 @@ const HomeScreen = () => {
 
       setItems(merged);
       setFilteredItems(merged);
-    } catch (e) {
       console.log("❌ Fetch error:", e);
     } finally {
       setRefreshing(false);
@@ -73,8 +75,6 @@ const HomeScreen = () => {
 
       setUserLat(lat);
       setUserLng(lng);
-
-      fetchAll(lat, lng);
     })();
   }, []);
 
@@ -106,20 +106,14 @@ const HomeScreen = () => {
   }, [userLat, userLng]);
 
   useEffect(() => {
-    if (!search.trim()) {
-      setFilteredItems(items);
-      return;
-    }
+    const delayDebounceFn = setTimeout(() => {
+      if (userLat && userLng) {
+        fetchAll(userLat, userLng, search);
+      }
+    }, 500);
 
-    const lower = search.toLowerCase();
-    const results = items.filter((it) => {
-      const a = it.origin ?? "";
-      const b = it.destination ?? "";
-      return `${a} ${b}`.toLowerCase().includes(lower);
-    });
-
-    setFilteredItems(results);
-  }, [search, items]);
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, userLat, userLng]);
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>

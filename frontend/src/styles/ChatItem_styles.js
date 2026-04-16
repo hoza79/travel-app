@@ -1,4 +1,3 @@
-// src/styles/ChatItem_styles.js
 import { StyleSheet } from "react-native";
 
 export default StyleSheet.create({
@@ -11,7 +10,6 @@ export default StyleSheet.create({
     borderBottomColor: "rgb(20,35,75)",
   },
 
-  // Highlight background for unread
   cardUnread: {
     backgroundColor: "rgba(77,163,255,0.12)",
   },

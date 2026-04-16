@@ -64,7 +64,7 @@ const MessagesScreen = () => {
       const handleConversationUpdate = (preview) => {
         setConversations((prev) => {
           const exists = prev.some(
-            (c) => c.conversationId === preview.conversationId
+            (c) => c.conversationId === preview.conversationId,
           );
 
           if (!exists) {
@@ -72,7 +72,7 @@ const MessagesScreen = () => {
           }
 
           return prev.map((c) =>
-            c.conversationId === preview.conversationId ? preview : c
+            c.conversationId === preview.conversationId ? preview : c,
           );
         });
       };
@@ -87,9 +87,6 @@ const MessagesScreen = () => {
     });
   }, []);
 
-  // --------------------------------------------------------
-  // SEARCH using otherUserName
-  // --------------------------------------------------------
   const filtered = conversations.filter((c) => {
     const name = c.otherUserName?.toLowerCase() || "";
     const term = search.toLowerCase();

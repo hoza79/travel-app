@@ -87,10 +87,6 @@ export default StyleSheet.create({
     fontSize: 13,
   },
 
-  /* ============================= */
-  /* MODAL — MATCHING TRIP MODAL   */
-  /* ============================= */
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

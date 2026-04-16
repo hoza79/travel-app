@@ -4,7 +4,7 @@ import { ProfileController } from './profile.controller';
 import { DatabaseModule } from '../database/database.module';
 
 @Module({
-  imports: [DatabaseModule], // ✅ REQUIRED so DATABASE_CONNECTION is available
+  imports: [DatabaseModule],
   controllers: [ProfileController],
   providers: [ProfileService],
 })

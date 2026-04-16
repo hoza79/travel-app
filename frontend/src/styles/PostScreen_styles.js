@@ -264,9 +264,6 @@ export default StyleSheet.create({
     fontWeight: "600",
   },
 
-  /* ============================= */
-  /* POST SUCCESS MODAL            */
-  /* ============================= */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

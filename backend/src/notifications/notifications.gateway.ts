@@ -109,7 +109,12 @@ export class NotificationsGateway
 
   // ⭐ Trip deleted broadcast
   sendTripDeleted(tripId: number) {
+    const label = `Socket_Broadcast_Trip_Deleted_${tripId}`;
+    console.time(label);
+
     this.server.emit('trip_deleted', { tripId });
+
+    console.timeEnd(label);
   }
 
   // ⭐ PHOTO deleted broadcast — NEW
