@@ -1,4 +1,3 @@
-// src/socket/index.js
 import { io } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
@@ -44,14 +43,15 @@ export const connectSocket = async () => {
     socket.on("connect", async () => {
       const userId = Number(await AsyncStorage.getItem("userId"));
       if (userId) {
-        socket.emit("chat_identify", { userId });
+        socket.emit("identify", { userId });
       }
 
-      try {
-        readyCallbacks.forEach((cb) => cb());
-      } finally {
-        readyCallbacks = [];
-      }
+      readyCallbacks.forEach((cb) => cb());
+      readyCallbacks = [];
+    });
+
+    socket.on("new_notification", (data) => {
+      notifyCallbacks.forEach((fn) => fn(data));
     });
 
     socket.on("disconnect", (reason) => {
@@ -59,7 +59,6 @@ export const connectSocket = async () => {
     });
 
     socket.on("newMessage", (msg) => {
-      // If the message belongs to another conversation → notify
       if (msg.conversationId !== activeChatId) {
         notifyCallbacks.forEach((fn) => fn(msg));
       }
@@ -67,7 +66,6 @@ export const connectSocket = async () => {
 
     return socket;
   } catch (e) {
-    console.log("[socket] connect error", e);
     throw e;
   }
 };

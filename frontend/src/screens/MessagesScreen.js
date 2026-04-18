@@ -27,7 +27,18 @@ const MessagesScreen = () => {
 
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
-      setConversations(list);
+
+      // ✅ filter + deduplicate
+      const clean = list
+        .filter((c) => c.conversationId && c.lastMessageTime)
+        .reduce((acc, curr) => {
+          if (!acc.find((c) => c.conversationId === curr.conversationId)) {
+            acc.push(curr);
+          }
+          return acc;
+        }, []);
+
+      setConversations(clean);
     } catch {
       setConversations([]);
     }
@@ -55,36 +66,32 @@ const MessagesScreen = () => {
   }, []);
 
   useEffect(() => {
+    let socket;
+
     onSocketReady(() => {
-      const socket = getSocket();
+      socket = getSocket();
       if (!socket) return;
 
-      const handleNewMessage = () => load();
-
       const handleConversationUpdate = (preview) => {
+        if (!preview?.conversationId) return;
+
         setConversations((prev) => {
-          const exists = prev.some(
-            (c) => c.conversationId === preview.conversationId,
+          const filtered = prev.filter(
+            (c) => c.conversationId !== preview.conversationId,
           );
 
-          if (!exists) {
-            return [preview, ...prev];
-          }
-
-          return prev.map((c) =>
-            c.conversationId === preview.conversationId ? preview : c,
-          );
+          return [preview, ...filtered];
         });
       };
 
-      socket.on("newMessage", handleNewMessage);
       socket.on("conversationUpdate", handleConversationUpdate);
-
-      return () => {
-        socket.off("newMessage", handleNewMessage);
-        socket.off("conversationUpdate", handleConversationUpdate);
-      };
     });
+
+    return () => {
+      if (socket) {
+        socket.off("conversationUpdate");
+      }
+    };
   }, []);
 
   const filtered = conversations.filter((c) => {
@@ -114,7 +121,7 @@ const MessagesScreen = () => {
       <ScrollView style={styles.scrollView}>
         {filtered.map((c) => (
           <Chat
-            key={c.conversationId}
+            key={c.conversationId} // ✅ FIXED KEY
             conversation={c}
             onDelete={deleteConversation}
           />

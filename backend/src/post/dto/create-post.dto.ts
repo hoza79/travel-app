@@ -4,6 +4,7 @@ import {
   IsInt,
   IsDateString,
   IsEnum,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -20,9 +21,9 @@ export class CreatePostDto {
   @IsDateString()
   date: string;
 
-  @IsNotEmpty()
   @Type(() => Number)
-  @IsInt({ message: 'Seats must be a number' })
+  @IsInt()
+  @Min(1)
   seatsAvailable: number;
 
   @IsString()

@@ -1,6 +1,6 @@
 import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSocket, onSocketReady, connectSocket } from "../socket";
+import { getSocket, connectSocket } from "../socket";
 import BASE_URL from "../config/api";
 import { AppState } from "react-native";
 
@@ -12,7 +12,6 @@ export const NotificationContext = createContext({
 export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const mountedRef = useRef(true);
-  const listenersAttached = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -30,22 +29,36 @@ export const NotificationProvider = ({ children }) => {
 
       const data = await res.json();
       const count = Array.isArray(data) ? data.length : 0;
-      console.log("[DEBUG] unread API response:", data);
 
       if (mountedRef.current) setUnreadCount(count);
     } catch {}
   };
 
-  const initSocketSafely = async () => {
-    const userId = await AsyncStorage.getItem("userId");
-    if (!userId) return;
-
-    await connectSocket();
-    fetchInitialUnread();
-  };
-
   useEffect(() => {
-    initSocketSafely();
+    const init = async () => {
+      const userId = await AsyncStorage.getItem("userId");
+      if (!userId) return;
+
+      await connectSocket();
+      fetchInitialUnread();
+
+      const socket = getSocket();
+      if (!socket) return;
+
+      socket.off("new_notification");
+
+      socket.on("new_notification", () => {
+        console.log("🔥 BADGE TRIGGER");
+        setUnreadCount((prev) => prev + 1);
+      });
+    };
+
+    init();
+
+    return () => {
+      const socket = getSocket();
+      socket?.off("new_notification");
+    };
   }, []);
 
   useEffect(() => {
@@ -53,26 +66,14 @@ export const NotificationProvider = ({ children }) => {
       if (state === "active") {
         const socket = getSocket();
         const userId = await AsyncStorage.getItem("userId");
+
         if (socket && socket.connected && userId) {
           socket.emit("identify", { userId });
         }
       }
     });
+
     return () => sub.remove();
-  }, []);
-
-  useEffect(() => {
-    onSocketReady(() => {
-      const socket = getSocket();
-      if (!socket || listenersAttached.current) return;
-
-      socket.off("new_notification");
-      socket.on("new_notification", () => {
-        setUnreadCount((prev) => prev + 1);
-      });
-
-      listenersAttached.current = true;
-    });
   }, []);
 
   return (

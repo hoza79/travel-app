@@ -168,9 +168,9 @@ const BottomNavigator = () => {
         name="Notifications"
         component={NotificationsScreen}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <NotificationTabIcon focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => {
+            return <NotificationTabIcon focused={focused} />;
+          },
         }}
       />
 

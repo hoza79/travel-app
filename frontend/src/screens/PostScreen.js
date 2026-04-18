@@ -43,12 +43,10 @@ const PostScreen = () => {
   const [location, setLocation] = useState("");
   const [photo, setPhoto] = useState(null);
 
-  // ✅ modal replaces SuccessMessageBox
   const [showPostModal, setShowPostModal] = useState(false);
   const [postModalText, setPostModalText] = useState("");
   const [navigateAfterOk, setNavigateAfterOk] = useState(false);
 
-  // CLOUDINARY
   const CLOUD_NAME = "del5ajmby";
   const UPLOAD_PRESET = "profile_preset";
 
@@ -148,7 +146,6 @@ const PostScreen = () => {
         <Image source={require("../assets/logo.png")} style={styles.logo} />
       </View>
 
-      {/* MAIN TABS */}
       <View style={styles.mainTabContainer}>
         <TouchableOpacity
           style={[
@@ -229,7 +226,6 @@ const PostScreen = () => {
                   </TouchableOpacity>
                 </View>
 
-                {/* FROM */}
                 <View style={{ position: "relative", marginBottom: 10 }}>
                   <View style={styles.inputContainer}>
                     <Image

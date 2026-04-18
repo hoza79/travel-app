@@ -1,4 +1,3 @@
-// src/context/MessageContext.js
 import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, onSocketReady } from "../socket";

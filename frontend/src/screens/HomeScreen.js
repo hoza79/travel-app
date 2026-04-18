@@ -58,7 +58,6 @@ const HomeScreen = () => {
 
       setItems(merged);
       setFilteredItems(merged);
-      console.log("❌ Fetch error:", e);
     } finally {
       setRefreshing(false);
     }
@@ -88,12 +87,10 @@ const HomeScreen = () => {
       });
 
       socket.on("trip_deleted", ({ tripId }) => {
-        console.log("🔥 Trip deleted event:", tripId);
         handleTripDeleted(tripId);
       });
 
       socket.on("photo_deleted", ({ photoId }) => {
-        console.log("🔥 Photo deleted event:", photoId);
         handlePhotoDeleted(photoId);
       });
 

@@ -26,7 +26,7 @@ export class NotificationsGateway
     this.logger.log('NotificationsGateway initialized');
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     try {
       let tokenUserId: number | null = null;
       try {
@@ -41,20 +41,19 @@ export class NotificationsGateway
 
       if (tokenUserId) {
         this.addClientMapping(tokenUserId, client.id);
+        await client.join(`user_${tokenUserId}`);
+        this.logger.log(`User ${tokenUserId} joined room: user_${tokenUserId}`);
       }
 
-      client.on('identify', (data) => {
+      client.on('identify', async (data) => {
         const uid = Number(data?.userId);
         if (!Number.isNaN(uid) && uid > 0) {
           this.addClientMapping(uid, client.id);
+          await client.join(`user_${uid}`);
           client.emit('identify_ack', { success: true, userId: uid });
         } else {
           client.emit('identify_ack', { success: false });
         }
-      });
-
-      client.on('disconnecting', () => {
-        this.removeSocketFromAllMappings(client.id);
       });
 
       client.on('disconnect', () => {
@@ -88,36 +87,20 @@ export class NotificationsGateway
   }
 
   sendNotification(userId: number, payload: any) {
-    const socketSet = this.clients.get(userId);
-    if (!socketSet) return;
-
-    for (const socketId of socketSet) {
-      this.server.to(socketId).emit('new_notification', payload);
-    }
+    this.logger.log(`Sending notification to user_${userId} via Redis/Rooms`);
+    this.server.to(`user_${userId}`).emit('new_notification', payload);
   }
 
   sendDeletion(userId: number, interestRequestId: number) {
-    const socketSet = this.clients.get(userId);
-    if (!socketSet) return;
-
-    for (const socketId of socketSet) {
-      this.server.to(socketId).emit('notification_deleted', {
-        interestRequestId,
-      });
-    }
+    this.server.to(`user_${userId}`).emit('notification_deleted', {
+      interestRequestId,
+    });
   }
 
-  // ⭐ Trip deleted broadcast
   sendTripDeleted(tripId: number) {
-    const label = `Socket_Broadcast_Trip_Deleted_${tripId}`;
-    console.time(label);
-
     this.server.emit('trip_deleted', { tripId });
-
-    console.timeEnd(label);
   }
 
-  // ⭐ PHOTO deleted broadcast — NEW
   sendPhotoDeleted(photoId: number) {
     this.server.emit('photo_deleted', { photoId });
   }

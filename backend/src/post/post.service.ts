@@ -386,7 +386,6 @@ export class PostService {
 
       await this.db.query(`DELETE FROM photos WHERE id = ?`, [photoId]);
 
-      // ⭐ NEW: broadcast deletion
       this.notificationsGateway.sendPhotoDeleted(photoId);
 
       return { message: 'Photo deleted successfully' };

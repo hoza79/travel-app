@@ -12,7 +12,7 @@ import CompleteProfileScreen from "./src/screens/CompleteProfileScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import BottomNavigator from "./src/common/BottomNavigator";
 import ChatTestScreen from "./src/screens/ChatTestScreen";
-import ProfilePassengerView from "./src/screens/ProfilePassengerView"; // other people's profile
+import ProfilePassengerView from "./src/screens/ProfilePassengerView";
 import ChatScreen from "./src/screens/ChatScreen";
 
 import { connectSocket } from "./src/socket";
@@ -44,7 +44,6 @@ export default function App() {
               />
               <Stack.Screen name="Home" component={HomeScreen} />
 
-              {/* ⭐ FIX: rename route so it does NOT conflict with tab "Profile" */}
               <Stack.Screen
                 name="UserProfile"
                 component={ProfilePassengerView}

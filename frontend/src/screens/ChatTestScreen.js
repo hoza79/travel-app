@@ -1,4 +1,3 @@
-// src/screens/ChatTestScreen.js
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -74,9 +73,7 @@ export default function ChatTestScreen() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(message),
         });
-      } catch (e) {
-        console.log("chat send fallback failed", e);
-      }
+      } catch (e) {}
     }
 
     setText("");

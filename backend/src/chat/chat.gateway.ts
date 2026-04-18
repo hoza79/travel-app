@@ -21,30 +21,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
 
-  private clients = new Map<number, string>();
-
   handleConnection(client: Socket) {
     console.log('Chat client connected:', client.id);
+
+    // 🔥 IMPORTANT – join room
+    client.on('chat_identify', async (data) => {
+      const userId = Number(data?.userId);
+      if (!userId) return;
+
+      await client.join(`user_${userId}`);
+      console.log(`User ${userId} joined room user_${userId}`);
+    });
   }
 
   handleDisconnect(client: Socket) {
     console.log('Chat client disconnected:', client.id);
-
-    for (const [userId, socketId] of this.clients.entries()) {
-      if (socketId === client.id) {
-        this.clients.delete(userId);
-        break;
-      }
-    }
-  }
-
-  @SubscribeMessage('chat_identify')
-  identify(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
-    const userId = Number(data?.userId);
-    if (!userId) return;
-
-    this.clients.set(userId, client.id);
-    return { status: 'ok' };
   }
 
   @SubscribeMessage('sendMessage')
@@ -54,21 +45,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { conversationId, sender_id, receiver_id, message_text } = message;
 
+    // 💾 SAVE MESSAGE
     await this.db.query(
       `
       INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, sent_at, is_read)
       VALUES (?, ?, ?, ?, NOW(), 0)
       `,
       [conversationId, sender_id, receiver_id, message_text],
-    );
-
-    await this.db.query(
-      `
-      DELETE FROM conversation_deleted
-      WHERE conversation_id = ?
-      AND user_id IN (?, ?)
-      `,
-      [conversationId, sender_id, receiver_id],
     );
 
     const payload = {
@@ -79,11 +62,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       sent_at: new Date(),
     };
 
-    const receiverSocket = this.clients.get(receiver_id);
-    if (receiverSocket) {
-      this.server.to(receiverSocket).emit('newMessage', payload);
-    }
-    client.emit('newMessage', payload);
+    this.server.to(`user_${receiver_id}`).emit('newMessage', payload);
+    this.server.to(`user_${sender_id}`).emit('newMessage', payload);
 
     const [[delSender]]: any = await this.db.query(
       `
@@ -109,6 +89,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const senderDeletedAt = delSender?.deleted_at || null;
     const receiverDeletedAt = delReceiver?.deleted_at || null;
+
     const previewSQL = `
       SELECT 
         c.id AS conversationId,
@@ -150,7 +131,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       LIMIT 1
     `;
 
-    // SENDER PREVIEW
     const [senderRows]: any = await this.db.query(previewSQL, [
       senderDeletedAt,
       senderDeletedAt,
@@ -162,8 +142,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       sender_id,
       conversationId,
     ]);
-
-    const senderPreview = senderRows[0];
 
     const [receiverRows]: any = await this.db.query(previewSQL, [
       receiverDeletedAt,
@@ -177,35 +155,42 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       conversationId,
     ]);
 
+    const senderPreview = senderRows[0];
     const receiverPreview = receiverRows[0];
 
-    const senderSocket = this.clients.get(sender_id);
-    if (senderSocket && senderPreview) {
-      this.server.to(senderSocket).emit('conversationUpdate', senderPreview);
+    if (senderPreview) {
+      this.server
+        .to(`user_${sender_id}`)
+        .emit('conversationUpdate', senderPreview);
     }
 
-    if (receiverSocket && receiverPreview) {
+    if (receiverPreview) {
       this.server
-        .to(receiverSocket)
+        .to(`user_${receiver_id}`)
         .emit('conversationUpdate', receiverPreview);
     }
 
-    return { delivered: !!receiverSocket };
+    return { delivered: true };
   }
 
   @SubscribeMessage('mark_read')
   async markMessagesRead(@MessageBody() data: any) {
     const { conversationId, userId } = data;
 
-    await this.db.query(
+    const [result]: any = await this.db.query(
       `
-      UPDATE messages
-      SET is_read = 1
-      WHERE conversation_id = ?
-      AND receiver_id = ?
-      `,
+  UPDATE messages
+  SET is_read = 1
+  WHERE conversation_id = ?
+  AND receiver_id = ?
+  AND is_read = 0
+  `,
       [conversationId, userId],
     );
+
+    if (result.affectedRows === 0) {
+      return { ok: true };
+    }
 
     const [[del]]: any = await this.db.query(
       `
@@ -258,10 +243,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
 
     const preview = rows[0];
-    const socketId = this.clients.get(userId);
 
-    if (socketId && preview) {
-      this.server.to(socketId).emit('conversationUpdate', preview);
+    if (preview) {
+      this.server.to(`user_${userId}`).emit('conversationUpdate', preview);
     }
 
     return { ok: true };

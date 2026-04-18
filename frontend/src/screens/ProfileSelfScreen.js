@@ -64,7 +64,6 @@ const ProfileSelfScreen = () => {
       const photosRes = await fetch(`${BASE_URL}/post/photos/${myId}`);
       setPhotos(await photosRes.json());
     } catch (err) {
-      console.log("❌ Profile load error:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -74,7 +73,7 @@ const ProfileSelfScreen = () => {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [])
+    }, []),
   );
 
   const onRefresh = () => {

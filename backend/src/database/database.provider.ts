@@ -18,7 +18,6 @@ export const databaseProviders: Provider[] = [
         queueLimit: 0,
       });
 
-      console.log('✅ Database connected successfully.');
       return pool;
     },
   },

@@ -5,7 +5,6 @@ import type { Pool } from 'mysql2/promise';
 export class ConversationsService {
   constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
 
-  // START OR FETCH EXISTING CONVERSATION
   async startConversation(userId: number, otherUserId: number) {
     const [existing]: any = await this.db.query(
       `
@@ -38,7 +37,6 @@ export class ConversationsService {
     return { conversationId };
   }
 
-  // GET USER CONVERSATIONS
   async getUserConversations(userId: number) {
     const [rows]: any = await this.db.query(
       `
@@ -47,41 +45,66 @@ export class ConversationsService {
       u.id AS otherUserId,
       CONCAT(u.first_name, ' ', u.last_name) AS otherUserName,
       u.profile_photo AS otherUserPhoto,
-      m.message_text AS lastMessageText,
-      m.sent_at AS lastMessageTime,
+
       (
-        SELECT COUNT(*) FROM messages 
+        SELECT message_text 
+        FROM messages 
+        WHERE conversation_id = c.id
+        AND (
+          cd.deleted_at IS NULL 
+          OR sent_at > cd.deleted_at
+        )
+        ORDER BY sent_at DESC 
+        LIMIT 1
+      ) AS lastMessageText,
+
+      (
+        SELECT sent_at 
+        FROM messages 
+        WHERE conversation_id = c.id
+        AND (
+          cd.deleted_at IS NULL 
+          OR sent_at > cd.deleted_at
+        )
+        ORDER BY sent_at DESC 
+        LIMIT 1
+      ) AS lastMessageTime,
+
+      (
+        SELECT COUNT(*) 
+        FROM messages 
         WHERE conversation_id = c.id
         AND receiver_id = ?
         AND is_read = 0
+        AND (
+          cd.deleted_at IS NULL 
+          OR sent_at > cd.deleted_at
+        )
       ) AS unreadCount
+
     FROM conversations c
+
     JOIN conversation_participants cp 
       ON cp.conversation_id = c.id
+
     JOIN conversation_participants cp2 
       ON cp2.conversation_id = c.id 
       AND cp2.user_id != cp.user_id
+
     JOIN users u 
       ON u.id = cp2.user_id
-    LEFT JOIN messages m 
-      ON m.id = (
-        SELECT id FROM messages 
-        WHERE conversation_id = c.id 
-        ORDER BY sent_at DESC 
-        LIMIT 1
-      )
+
+    LEFT JOIN conversation_deleted cd
+      ON cd.conversation_id = c.id AND cd.user_id = ?
+
     WHERE cp.user_id = ?
-    AND c.id NOT IN (
-      SELECT conversation_id 
-      FROM conversation_deleted 
-      WHERE user_id = ?
-    )
-    ORDER BY m.sent_at DESC
+
+    ORDER BY lastMessageTime DESC
     `,
       [userId, userId, userId],
     );
 
-    return rows;
+    return rows.filter((row) => row.lastMessageTime !== null);
   }
 
   async deleteConversation(userId: number, conversationId: number) {

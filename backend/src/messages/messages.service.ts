@@ -1,9 +1,13 @@
 import { Injectable, Inject } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
+import { NotificationsGateway } from '../notifications/notifications.gateway'; // ✅ ADD
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
+  constructor(
+    @Inject('DATABASE_CONNECTION') private readonly db: Pool,
+    private readonly gateway: NotificationsGateway, // ✅ ADD
+  ) {}
 
   async insertMessage(userId: number, body: any) {
     const { conversationId, receiverId, message_text } = body;
@@ -15,6 +19,13 @@ export class MessagesService {
       `,
       [conversationId, userId, receiverId, message_text],
     );
+
+    this.gateway.server.to(`user_${receiverId}`).emit('newMessage', {
+      conversationId,
+      sender_id: userId,
+      receiver_id: receiverId,
+      message_text,
+    });
 
     return { success: true };
   }

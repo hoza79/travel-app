@@ -8,9 +8,6 @@ export default function TripViewScreen({ route }) {
   const tripId = route?.params?.tripId;
 
   if (!tripId) {
-    console.log(
-      "❌ TripViewScreen opened WITHOUT tripId → preventing NaN fetch",
-    );
     return (
       <View
         style={{
@@ -50,9 +47,7 @@ export default function TripViewScreen({ route }) {
         );
         const sData = await sRes.json();
         setStatus(sData.status || null);
-      } catch (err) {
-        console.log("TripView error:", err);
-      }
+      } catch (err) {}
       setLoading(false);
     };
 
