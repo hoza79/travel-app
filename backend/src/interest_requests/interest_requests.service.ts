@@ -109,18 +109,25 @@ export class InterestRequestsService {
         throw new BadRequestException('Trip not found');
       }
 
-      const [[count]]: any = await connection.query(
+      const [result]: any = await connection.query(
         `
-        SELECT COUNT(*) AS accepted
-        FROM interest_requests
-        WHERE trip_id = ? AND status = 'accepted'
+          UPDATE interest_requests ir
+          JOIN trips t ON ir.trip_id = t.id
+          SET ir.status = 'accepted'
+          WHERE ir.id = ?
+          AND ir.status = 'pending'
+          AND (
+            SELECT COUNT(*) 
+            FROM interest_requests 
+            WHERE trip_id = t.id AND status = 'accepted'
+          ) < t.available_seats
         `,
-        [req.trip_id],
+        [id],
       );
 
-      if (count.accepted >= trip.available_seats) {
+      if (result.affectedRows === 0) {
         await connection.rollback();
-        throw new BadRequestException('This trip is full');
+        throw new BadRequestException('Trip is full or already handled');
       }
 
       await connection.query(
