@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   Req,
@@ -36,10 +35,18 @@ export class PostController {
     @Query('lng') lng?: string,
     @Query('search') search?: string,
     @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
   ) {
-    const parsedLat = lat ? Number(lat) : 0;
-    const parsedLng = lng ? Number(lng) : 0;
+    const parsedLat = lat ? Number(lat) : undefined;
+    const parsedLng = lng ? Number(lng) : undefined;
     const parsedOffset = offset ? Number(offset) : 0;
+
+    // ✅ protect limit
+    const parsedLimit = limit ? Math.min(Number(limit), 100) : 50;
+
+    if (parsedLat == null || parsedLng == null) {
+      throw new BadRequestException('Coordinates are required');
+    }
 
     if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
       throw new BadRequestException('Coordinates must be valid numbers');
@@ -50,6 +57,7 @@ export class PostController {
       parsedLng,
       search,
       parsedOffset,
+      parsedLimit,
     );
   }
 
@@ -69,10 +77,20 @@ export class PostController {
   }
 
   @Get('photos')
-  getAllPhotos(@Query('lat') lat?: string, @Query('lng') lng?: string) {
+  getAllPhotos(
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedOffset = offset ? Number(offset) : 0;
+    const parsedLimit = limit ? Math.min(Number(limit), 100) : 50;
+
     return this.postService.getAllPhotos(
       lat ? Number(lat) : undefined,
       lng ? Number(lng) : undefined,
+      parsedOffset,
+      parsedLimit,
     );
   }
 
@@ -85,9 +103,11 @@ export class PostController {
   deletePhoto(@Req() req, @Param('photoId') photoId: string) {
     const userId = verifyToken(req);
     const parsed = Number(photoId);
+
     if (Number.isNaN(parsed)) {
       throw new BadRequestException('Invalid photo id');
     }
+
     return this.postService.deletePhoto(parsed, userId);
   }
 
@@ -95,18 +115,22 @@ export class PostController {
   delete(@Req() req, @Param('id') id: string) {
     const userId = verifyToken(req);
     const parsed = Number(id);
+
     if (Number.isNaN(parsed)) {
       throw new BadRequestException('Invalid trip id');
     }
+
     return this.postService.delete(parsed, userId);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
     const parsed = Number(id);
+
     if (Number.isNaN(parsed)) {
       throw new BadRequestException('Invalid trip id');
     }
+
     return this.postService.findOne(parsed);
   }
 }

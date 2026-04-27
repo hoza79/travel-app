@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { RedisIoAdapter } from './redis-io.adapter';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -9,9 +8,6 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn'],
   });
-  const redisIoAdapter = new RedisIoAdapter(app);
-  await redisIoAdapter.connectToRedis();
-  app.useWebSocketAdapter(redisIoAdapter);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -20,6 +16,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
   app.enableCors({
     origin: '*',
   });

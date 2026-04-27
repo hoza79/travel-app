@@ -56,9 +56,12 @@ const ProfileSelfScreen = () => {
       setProfilePhoto(data.profile_photo || null);
       setCoverPhoto(data.cover_photo || null);
 
-      const tripsRes = await fetch(`${BASE_URL}/post/my-trips`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const tripsRes = await fetch(
+        `${BASE_URL}/post/my-trips?offset=0&limit=100`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       setTrips(await tripsRes.json());
 
       const photosRes = await fetch(`${BASE_URL}/post/photos/${myId}`);

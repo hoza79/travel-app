@@ -23,6 +23,11 @@ const HomeScreen = () => {
   const [userLat, setUserLat] = useState(null);
   const [userLng, setUserLng] = useState(null);
 
+  const [offset, setOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false); // ✅ FIX
+
+  const LIMIT = 50;
+
   const handleTripDeleted = (deletedId) => {
     setItems((prev) => prev.filter((item) => item.id !== deletedId));
     setFilteredItems((prev) => prev.filter((item) => item.id !== deletedId));
@@ -35,10 +40,10 @@ const HomeScreen = () => {
     );
   };
 
-  const fetchAll = async (lat, lng, searchTerm = "") => {
+  const fetchAll = async (lat, lng, searchTerm = "", offsetVal = 0) => {
     try {
-      const tripsUrl = `${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}&search=${searchTerm}&limit=100`;
-      const photosUrl = `${BASE_URL}/post/photos?lat=${lat}&lng=${lng}&search=${searchTerm}`;
+      const tripsUrl = `${BASE_URL}/post/nearby?lat=${lat}&lng=${lng}&search=${searchTerm}&offset=${offsetVal}&limit=${LIMIT}`;
+      const photosUrl = `${BASE_URL}/post/photos?lat=${lat}&lng=${lng}&offset=${offsetVal}&limit=${LIMIT}`;
 
       const [tripsRes, photosRes] = await Promise.all([
         fetch(tripsUrl),
@@ -46,8 +51,7 @@ const HomeScreen = () => {
       ]);
 
       const trips = await tripsRes.json().catch(() => []);
-      const rawPhotos = await photosRes.json().catch(() => []);
-      const photos = Array.isArray(rawPhotos) ? rawPhotos : [];
+      const photos = await photosRes.json().catch(() => []);
 
       const merged = [
         ...trips.map((t) => ({ ...t, feedType: "trip" })),
@@ -56,34 +60,55 @@ const HomeScreen = () => {
 
       merged.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
-      setItems(merged);
-      setFilteredItems(merged);
+      if (offsetVal === 0) {
+        setItems(merged);
+        setFilteredItems(merged);
+      } else {
+        // ✅ OPTIONAL: prevent duplicates
+        setItems((prev) => {
+          const map = new Map();
+          [...prev, ...merged].forEach((item) => {
+            map.set(`${item.feedType}-${item.id}`, item);
+          });
+          return Array.from(map.values());
+        });
+
+        setFilteredItems((prev) => {
+          const map = new Map();
+          [...prev, ...merged].forEach((item) => {
+            map.set(`${item.feedType}-${item.id}`, item);
+          });
+          return Array.from(map.values());
+        });
+      }
     } finally {
       setRefreshing(false);
     }
   };
 
+  // 🔥 Get location once
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
       const loc = await Location.getCurrentPositionAsync({});
-      const lat = loc.coords.latitude;
-      const lng = loc.coords.longitude;
-
-      setUserLat(lat);
-      setUserLng(lng);
+      setUserLat(loc.coords.latitude);
+      setUserLng(loc.coords.longitude);
     })();
   }, []);
 
+  // 🔥 Socket updates
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
       socket.on("new_notification", () => {
-        if (userLat && userLng) fetchAll(userLat, userLng);
+        if (userLat && userLng) {
+          setOffset(0);
+          fetchAll(userLat, userLng, search, 0);
+        }
       });
 
       socket.on("trip_deleted", ({ tripId }) => {
@@ -100,16 +125,18 @@ const HomeScreen = () => {
         socket.off("photo_deleted");
       };
     });
-  }, [userLat, userLng]);
+  }, [userLat, userLng, search]);
 
+  // 🔥 Search debounce
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
+    const delay = setTimeout(() => {
       if (userLat && userLng) {
-        fetchAll(userLat, userLng, search);
+        setOffset(0);
+        fetchAll(userLat, userLng, search, 0);
       }
     }, 500);
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => clearTimeout(delay);
   }, [search, userLat, userLng]);
 
   return (
@@ -124,7 +151,10 @@ const HomeScreen = () => {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => fetchAll(userLat, userLng)}
+              onRefresh={() => {
+                setOffset(0);
+                fetchAll(userLat, userLng, search, 0);
+              }}
             />
           }
           ListHeaderComponent={
@@ -179,6 +209,23 @@ const HomeScreen = () => {
           estimatedItemSize={400}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          // 🔥 FINAL FIX (stable pagination)
+          onEndReached={() => {
+            if (!userLat || !userLng || loadingMore) return;
+
+            setLoadingMore(true);
+
+            setOffset((prevOffset) => {
+              const newOffset = prevOffset + LIMIT;
+
+              fetchAll(userLat, userLng, search, newOffset).finally(() => {
+                setLoadingMore(false);
+              });
+
+              return newOffset;
+            });
+          }}
+          onEndReachedThreshold={0.5}
         />
       </SafeAreaView>
     </TouchableWithoutFeedback>

@@ -1,3 +1,3 @@
-const BASE_URL = "https://causal-trustless-levitate.ngrok-free.dev";
+const BASE_URL = "http://localhost:3000";
 
 export default BASE_URL;

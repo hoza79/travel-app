@@ -42,7 +42,10 @@ export class PostService {
 
     try {
       const [rows]: any = await this.db.query(
-        'SELECT COUNT(*) AS count FROM trips WHERE creator_id = ?',
+        `SELECT COUNT(*) AS count
+          FROM trips
+          WHERE creator_id = ?
+          AND status = 'open'`,
         [userId],
       );
       const userPostCount = rows[0].count;
@@ -98,64 +101,42 @@ export class PostService {
 
   async findNearby(
     userLat: number,
-
     userLng: number,
-
     searchTerm?: string,
-
     offset: number = 0,
+    limit: number = 50,
   ) {
     try {
-      const limit = 100;
-
       let sql = `
-
-          SELECT
-
-          trips.*,
-
-          users.first_name,
-
-          users.profile_photo,
-
-          (6371 * acos(
-
+      SELECT
+        trips.*,
+        users.first_name,
+        users.profile_photo,
+        (6371 * acos(
           cos(radians(?)) *
-
           cos(radians(origin_lat)) *
-
           cos(radians(origin_lng) - radians(?)) +
-
           sin(radians(?)) *
-
           sin(radians(origin_lat))
-
-          )) AS distance
-
-          FROM trips
-
-          JOIN users ON trips.creator_id = users.id
-
-          `;
+        )) AS distance
+      FROM trips
+      JOIN users ON trips.creator_id = users.id
+    `;
 
       const params: any[] = [userLat, userLng, userLat];
 
       if (searchTerm && searchTerm.trim() !== '') {
         sql += ` WHERE (origin LIKE ? OR destination LIKE ?) `;
-
         params.push(`%${searchTerm}%`, `%${searchTerm}%`);
       }
 
       sql += ` ORDER BY distance ASC LIMIT ? OFFSET ?`;
-
       params.push(limit, offset);
 
       const [rows] = await this.db.query(sql, params);
-
       return rows;
     } catch (error) {
       console.error('❌ Database Error (findNearby):', error);
-
       throw error;
     }
   }
@@ -294,50 +275,60 @@ export class PostService {
     }
   }
 
-  async getAllPhotos(userLat?: number, userLng?: number) {
+  async getAllPhotos(
+    userLat?: number,
+    userLng?: number,
+    offset: number = 0,
+    limit: number = 50,
+  ) {
     try {
-      if (!userLat || !userLng) {
+      // ❗ No location → NO distance sorting
+      if (userLat == null || userLng == null) {
         const [rows]: any = await this.db.query(
           `SELECT 
-            photos.id,
-            photos.user_id,
-            photos.photo_url,
-            photos.location,
-            photos.description,
-            photos.created_at,
-            users.first_name,
-            users.profile_photo
-           FROM photos
-           JOIN users ON photos.user_id = users.id
-           ORDER BY photos.created_at DESC`,
+          photos.id,
+          photos.user_id,
+          photos.photo_url,
+          photos.location,
+          photos.description,
+          photos.created_at,
+          users.first_name,
+          users.profile_photo
+         FROM photos
+         JOIN users ON photos.user_id = users.id
+         ORDER BY photos.created_at DESC
+         LIMIT ? OFFSET ?`,
+          [limit, offset],
         );
         return rows;
       }
 
+      // ✅ With location
       const [rows]: any = await this.db.query(
         `SELECT 
-            photos.id,
-            photos.user_id,
-            photos.photo_url,
-            photos.location,
-            photos.description,
-            photos.created_at,
-            photos.photo_lat,
-            photos.photo_lng,
-            users.first_name,
-            users.profile_photo,
-            (6371 * acos(
-              cos(radians(?)) *
-              cos(radians(photo_lat)) *
-              cos(radians(photo_lng) - radians(?)) +
-              sin(radians(?)) *
-              sin(radians(photo_lat))
-            )) AS distance
-         FROM photos
-         JOIN users ON photos.user_id = users.id
-         WHERE photo_lat IS NOT NULL AND photo_lng IS NOT NULL
-         ORDER BY distance ASC`,
-        [userLat, userLng, userLat],
+        photos.id,
+        photos.user_id,
+        photos.photo_url,
+        photos.location,
+        photos.description,
+        photos.created_at,
+        photos.photo_lat,
+        photos.photo_lng,
+        users.first_name,
+        users.profile_photo,
+        (6371 * acos(
+          cos(radians(?)) *
+          cos(radians(photo_lat)) *
+          cos(radians(photo_lng) - radians(?)) +
+          sin(radians(?)) *
+          sin(radians(photo_lat))
+        )) AS distance
+       FROM photos
+       JOIN users ON photos.user_id = users.id
+       WHERE photo_lat IS NOT NULL AND photo_lng IS NOT NULL
+       ORDER BY distance ASC
+       LIMIT ? OFFSET ?`,
+        [userLat, userLng, userLat, limit, offset],
       );
 
       return rows;

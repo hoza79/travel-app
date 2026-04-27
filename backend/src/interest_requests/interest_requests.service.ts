@@ -47,7 +47,7 @@ export class InterestRequestsService {
       });
 
       return { message: 'Skapad', id: interestRequestId };
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === 'ER_DUP_ENTRY') {
         throw new BadRequestException('Redan anmäld');
       }
