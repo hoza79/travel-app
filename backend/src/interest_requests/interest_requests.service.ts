@@ -63,7 +63,6 @@ export class InterestRequestsService {
 
     return rows.length === 0 ? { status: null } : { status: rows[0].status };
   }
-
   async acceptRequest(id: number, ownerId: number) {
     if (!id || isNaN(id)) {
       throw new BadRequestException('Invalid interest request id');
@@ -74,13 +73,14 @@ export class InterestRequestsService {
     try {
       await connection.beginTransaction();
 
+      // 🔒 1. Hämta request
       const [[req]]: any = await connection.query(
         `
-        SELECT requester_id, trip_id, status
-        FROM interest_requests
-        WHERE id = ?
-        FOR UPDATE
-        `,
+      SELECT requester_id, trip_id, status
+      FROM interest_requests
+      WHERE id = ?
+      FOR UPDATE
+      `,
         [id],
       );
 
@@ -94,13 +94,14 @@ export class InterestRequestsService {
         throw new BadRequestException('Request already handled');
       }
 
+      // 🔒 2. Hämta trip
       const [[trip]]: any = await connection.query(
         `
-        SELECT available_seats
-        FROM trips
-        WHERE id = ?
-        FOR UPDATE
-        `,
+      SELECT available_seats
+      FROM trips
+      WHERE id = ?
+      FOR UPDATE
+      `,
         [req.trip_id],
       );
 
@@ -109,33 +110,31 @@ export class InterestRequestsService {
         throw new BadRequestException('Trip not found');
       }
 
-      const [result]: any = await connection.query(
+      // 🔒 3. Räkna accepted
+      const [[countRow]]: any = await connection.query(
         `
-          UPDATE interest_requests ir
-          JOIN trips t ON ir.trip_id = t.id
-          SET ir.status = 'accepted'
-          WHERE ir.id = ?
-          AND ir.status = 'pending'
-          AND (
-            SELECT COUNT(*) 
-            FROM interest_requests 
-            WHERE trip_id = t.id AND status = 'accepted'
-          ) < t.available_seats
-        `,
-        [id],
+      SELECT COUNT(*) AS accepted
+      FROM interest_requests
+      WHERE trip_id = ? AND status = 'accepted'
+      FOR UPDATE
+      `,
+        [req.trip_id],
       );
 
-      if (result.affectedRows === 0) {
+      const acceptedCount = countRow.accepted ?? 0;
+
+      if (acceptedCount >= trip.available_seats) {
         await connection.rollback();
-        throw new BadRequestException('Trip is full or already handled');
+        throw new BadRequestException('Trip is full');
       }
 
+      // ✅ 4. Uppdatera status
       await connection.query(
         `
-        UPDATE interest_requests
-        SET status = 'accepted'
-        WHERE id = ?
-        `,
+      UPDATE interest_requests
+      SET status = 'accepted'
+      WHERE id = ? AND status = 'pending'
+      `,
         [id],
       );
 
@@ -165,7 +164,6 @@ export class InterestRequestsService {
       connection.release();
     }
   }
-
   async remove(id: number) {
     const [[req]]: any = await this.db.query(
       `SELECT requester_id FROM interest_requests WHERE id = ?`,

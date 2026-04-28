@@ -41,7 +41,6 @@ export class PostController {
     const parsedLng = lng ? Number(lng) : undefined;
     const parsedOffset = offset ? Number(offset) : 0;
 
-    // ✅ protect limit
     const parsedLimit = limit ? Math.min(Number(limit), 100) : 50;
 
     if (parsedLat == null || parsedLng == null) {

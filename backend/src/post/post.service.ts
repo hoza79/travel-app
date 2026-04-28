@@ -282,7 +282,6 @@ export class PostService {
     limit: number = 50,
   ) {
     try {
-      // ❗ No location → NO distance sorting
       if (userLat == null || userLng == null) {
         const [rows]: any = await this.db.query(
           `SELECT 
@@ -303,7 +302,6 @@ export class PostService {
         return rows;
       }
 
-      // ✅ With location
       const [rows]: any = await this.db.query(
         `SELECT 
         photos.id,

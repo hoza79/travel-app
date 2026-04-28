@@ -1,6 +1,6 @@
 import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSocket, connectSocket } from "../socket";
+import { getSocket, onSocketReady } from "../socket";
 import BASE_URL from "../config/api";
 import { AppState } from "react-native";
 
@@ -18,7 +18,7 @@ export const NotificationProvider = ({ children }) => {
     return () => (mountedRef.current = false);
   }, []);
 
-  const fetchInitialUnread = async () => {
+  const refetchUnread = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
@@ -30,35 +30,57 @@ export const NotificationProvider = ({ children }) => {
       const data = await res.json();
       const count = Array.isArray(data) ? data.length : 0;
 
-      if (mountedRef.current) setUnreadCount(count);
-    } catch {}
+      if (mountedRef.current) {
+        setUnreadCount(count);
+      }
+    } catch (e) {
+      console.log("❌ refetchUnread error:", e);
+    }
   };
 
   useEffect(() => {
-    const init = async () => {
-      const userId = await AsyncStorage.getItem("userId");
-      if (!userId) return;
-
-      await connectSocket();
-      fetchInitialUnread();
-
+    onSocketReady(() => {
       const socket = getSocket();
       if (!socket) return;
 
+      const handleNewNotification = () => {
+        console.log("🔥 NEW NOTIFICATION EVENT");
+        refetchUnread();
+      };
+
+      const handleDeletion = () => {
+        console.log("🗑 NOTIFICATION DELETED EVENT");
+        refetchUnread();
+      };
+
+      const handleReconnect = async () => {
+        console.log("🔁 SOCKET RECONNECTED");
+
+        const userId = await AsyncStorage.getItem("userId");
+        if (userId) {
+          socket.emit("identify", { userId });
+          console.log("👤 RE-IDENTIFIED:", userId);
+        }
+
+        refetchUnread();
+      };
+
       socket.off("new_notification");
+      socket.off("notification_deleted");
+      socket.off("connect");
 
-      socket.on("new_notification", () => {
-        console.log("🔥 BADGE TRIGGER");
-        setUnreadCount((prev) => prev + 1);
-      });
-    };
+      socket.on("new_notification", handleNewNotification);
+      socket.on("notification_deleted", handleDeletion);
+      socket.on("connect", handleReconnect);
 
-    init();
+      refetchUnread();
 
-    return () => {
-      const socket = getSocket();
-      socket?.off("new_notification");
-    };
+      return () => {
+        socket.off("new_notification", handleNewNotification);
+        socket.off("notification_deleted", handleDeletion);
+        socket.off("connect", handleReconnect);
+      };
+    });
   }, []);
 
   useEffect(() => {
@@ -70,6 +92,8 @@ export const NotificationProvider = ({ children }) => {
         if (socket && socket.connected && userId) {
           socket.emit("identify", { userId });
         }
+
+        refetchUnread();
       }
     });
 

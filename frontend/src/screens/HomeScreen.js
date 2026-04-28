@@ -64,7 +64,6 @@ const HomeScreen = () => {
         setItems(merged);
         setFilteredItems(merged);
       } else {
-        // ✅ OPTIONAL: prevent duplicates
         setItems((prev) => {
           const map = new Map();
           [...prev, ...merged].forEach((item) => {
@@ -86,7 +85,6 @@ const HomeScreen = () => {
     }
   };
 
-  // 🔥 Get location once
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -98,7 +96,6 @@ const HomeScreen = () => {
     })();
   }, []);
 
-  // 🔥 Socket updates
   useEffect(() => {
     onSocketReady(() => {
       const socket = getSocket();
@@ -127,7 +124,6 @@ const HomeScreen = () => {
     });
   }, [userLat, userLng, search]);
 
-  // 🔥 Search debounce
   useEffect(() => {
     const delay = setTimeout(() => {
       if (userLat && userLng) {
@@ -209,7 +205,6 @@ const HomeScreen = () => {
           estimatedItemSize={400}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          // 🔥 FINAL FIX (stable pagination)
           onEndReached={() => {
             if (!userLat || !userLng || loadingMore) return;
 
