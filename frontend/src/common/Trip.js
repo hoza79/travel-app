@@ -16,13 +16,11 @@ const Trip = ({
   const [expanded, setExpanded] = useState(false);
   const navigation = useNavigation();
 
-  // Extract city + country
   const originCity = from ? from.split(/[ ,]+/)[0] : "";
   const destinationCity = to ? to.split(/[ ,]+/)[0] : "";
   const originCountry = from ? from.split(/[ ,]+/)[1] : "";
   const destinationCountry = to ? to.split(/[ ,]+/)[1] : "";
 
-  // Match flags
   let originFlag = "";
   let destinationFlag = "";
   const safeOrigin = originCountry ? originCountry.toLowerCase() : "";
@@ -36,7 +34,6 @@ const Trip = ({
     if (lower === safeDestination) destinationFlag = flag;
   }
 
-  // Format date
   let formattedDate = "";
   if (date) {
     formattedDate = new Date(date).toLocaleDateString("en-GB", {

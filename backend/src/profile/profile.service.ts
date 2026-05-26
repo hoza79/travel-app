@@ -36,7 +36,6 @@ export class ProfileService {
         cover_photo: r.cover_photo || null,
       };
     } catch (error) {
-      console.error('❌ Database Error (getProfileByUserId):', error);
       throw error;
     }
   }

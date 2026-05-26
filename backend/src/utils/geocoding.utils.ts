@@ -11,10 +11,8 @@ export async function getCoordinates(city) {
 
   if (data.status === 'OK') {
     const location = data.results[0].geometry.location;
-    console.log(location);
     return location;
   } else {
-    console.error('Error:', data.status);
     return null;
   }
 }

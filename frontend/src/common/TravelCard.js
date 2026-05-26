@@ -12,7 +12,8 @@ import styles from "../styles/TravelCard_styles";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
-import { getSocket, onSocketReady } from "../socket";
+import { getSocket, onSocketConnected, onSocketReady } from "../socket";
+
 import { countryFlags } from "../common/Flags";
 
 const getFlagForLocation = (location) => {
@@ -44,7 +45,6 @@ const TravelCard = ({
   onTripDeleted,
 }) => {
   if (!tripId || isNaN(Number(tripId))) {
-    console.log("❌ INVALID tripId passed:", tripId);
     return null;
   }
 
@@ -116,35 +116,54 @@ const TravelCard = ({
   }, [tripId]);
 
   useEffect(() => {
-    onSocketReady(() => {
+    let socketRef = null;
+
+    const handleNotificationDeleted = (notif) => {
+      if (notif?.interestRequestId === interestRequestId) {
+        setStatus("rejected");
+        setIsFull(true);
+      }
+    };
+
+    const handleNewNotification = (notif) => {
+      try {
+        if (notif?.trip_id !== tripId) return;
+
+        if (notif?.type === "interest_accepted") {
+          setStatus("accepted");
+          fetchAcceptedCount();
+        }
+      } catch {}
+    };
+
+    const attachListeners = () => {
       const socket = getSocket();
       if (!socket) return;
 
-      const handler = (notif) => {
-        if (notif?.interestRequestId === interestRequestId) {
-          setStatus("rejected");
-          setIsFull(true);
-        }
-      };
+      if (socketRef && socketRef !== socket) {
+        socketRef.off("notification_deleted", handleNotificationDeleted);
+        socketRef.off("new_notification", handleNewNotification);
+      }
 
-      socket.on("notification_deleted", handler);
+      socketRef = socket;
+      socket.off("notification_deleted", handleNotificationDeleted);
+      socket.off("new_notification", handleNewNotification);
+      socket.on("notification_deleted", handleNotificationDeleted);
+      socket.on("new_notification", handleNewNotification);
+    };
 
-      socket.on("new_notification", (notif) => {
-        try {
-          if (notif?.trip_id !== tripId) return;
+    const unsubscribeReady = onSocketReady(attachListeners);
+    const unsubscribeConnect = onSocketConnected(attachListeners);
 
-          if (notif?.type === "interest_accepted") {
-            setStatus("accepted");
-            fetchAcceptedCount();
-          }
-        } catch {}
-      });
+    return () => {
+      unsubscribeReady();
+      unsubscribeConnect();
 
-      return () => {
-        socket.off("notification_deleted", handler);
-        socket.off("new_notification");
-      };
-    });
+      if (socketRef) {
+        socketRef.off("notification_deleted", handleNotificationDeleted);
+        socketRef.off("new_notification", handleNewNotification);
+      }
+    };
   }, [tripId, interestRequestId]);
 
   const handleInterest = async () => {
@@ -162,7 +181,7 @@ const TravelCard = ({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ tripId, ownerId: creatorId }),
+        body: JSON.stringify({ tripId }),
       });
 
       if (res.status === 400) {

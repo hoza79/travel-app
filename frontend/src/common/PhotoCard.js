@@ -53,7 +53,6 @@ const PhotoCard = ({
 
       if (onPhotoDeleted) onPhotoDeleted(id);
     } catch (err) {
-      console.log("❌ Photo delete error:", err);
       setIsDeleting(false);
     }
   };

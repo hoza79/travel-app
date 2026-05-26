@@ -1,4 +1,9 @@
-import { Injectable, Inject, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -26,12 +31,49 @@ export class InterestRequestsService {
   }
 
   async create(dto: CreateInterestRequestDto, requesterId: number) {
-    const { tripId, ownerId } = dto;
+    const { tripId } = dto;
+
+    const [[trip]]: any = await this.db.query(
+      `
+    SELECT creator_id, available_seats
+    FROM trips
+    WHERE id = ?
+    LIMIT 1
+    `,
+      [tripId],
+    );
+
+    if (!trip) {
+      throw new BadRequestException('Trip not found');
+    }
+
+    const ownerId = trip.creator_id;
+
+    if (ownerId === requesterId) {
+      throw new BadRequestException(
+        'You cannot request interest on your own trip',
+      );
+    }
+
+    const [[countRow]]: any = await this.db.query(
+      `
+    SELECT COUNT(*) AS accepted
+    FROM interest_requests
+    WHERE trip_id = ? AND status = 'accepted'
+    `,
+      [tripId],
+    );
+
+    const acceptedCount = countRow.accepted ?? 0;
+
+    if (acceptedCount >= trip.available_seats) {
+      throw new BadRequestException('Trip is full');
+    }
 
     try {
       const [result]: any = await this.db.query(
-        `INSERT INTO interest_requests (trip_id, requester_id, owner_id, status) 
-         VALUES (?, ?, ?, 'pending')`,
+        `INSERT INTO interest_requests (trip_id, requester_id, owner_id, status)
+       VALUES (?, ?, ?, 'pending')`,
         [tripId, requesterId, ownerId],
       );
 
@@ -63,20 +105,24 @@ export class InterestRequestsService {
 
     return rows.length === 0 ? { status: null } : { status: rows[0].status };
   }
-  async acceptRequest(id: number, ownerId: number) {
+  async acceptRequest(id: number, loggedInUserId: number) {
     if (!id || isNaN(id)) {
       throw new BadRequestException('Invalid interest request id');
     }
 
     const connection = await this.db.getConnection();
+    let acceptedRequest: { requesterId: number; tripId: number } | null = null;
 
     try {
       await connection.beginTransaction();
 
-      // 🔒 1. Hämta request
       const [[req]]: any = await connection.query(
         `
-      SELECT requester_id, trip_id, status
+      SELECT
+        requester_id,
+        trip_id,
+        owner_id,
+        status
       FROM interest_requests
       WHERE id = ?
       FOR UPDATE
@@ -85,19 +131,12 @@ export class InterestRequestsService {
       );
 
       if (!req) {
-        await connection.rollback();
         throw new BadRequestException('Request not found');
       }
 
-      if (req.status !== 'pending') {
-        await connection.rollback();
-        throw new BadRequestException('Request already handled');
-      }
-
-      // 🔒 2. Hämta trip
       const [[trip]]: any = await connection.query(
         `
-      SELECT available_seats
+      SELECT creator_id, available_seats
       FROM trips
       WHERE id = ?
       FOR UPDATE
@@ -106,17 +145,25 @@ export class InterestRequestsService {
       );
 
       if (!trip) {
-        await connection.rollback();
         throw new BadRequestException('Trip not found');
       }
 
-      // 🔒 3. Räkna accepted
+      if (
+        req.owner_id !== loggedInUserId ||
+        trip.creator_id !== loggedInUserId
+      ) {
+        throw new ForbiddenException('You cannot accept this request');
+      }
+
+      if (req.status !== 'pending') {
+        throw new BadRequestException('Request already handled');
+      }
+
       const [[countRow]]: any = await connection.query(
         `
       SELECT COUNT(*) AS accepted
       FROM interest_requests
       WHERE trip_id = ? AND status = 'accepted'
-      FOR UPDATE
       `,
         [req.trip_id],
       );
@@ -124,11 +171,9 @@ export class InterestRequestsService {
       const acceptedCount = countRow.accepted ?? 0;
 
       if (acceptedCount >= trip.available_seats) {
-        await connection.rollback();
         throw new BadRequestException('Trip is full');
       }
 
-      // ✅ 4. Uppdatera status
       await connection.query(
         `
       UPDATE interest_requests
@@ -138,42 +183,84 @@ export class InterestRequestsService {
         [id],
       );
 
-      await connection.commit();
-
-      await this.db.query(
-        `DELETE FROM notifications WHERE interest_request_id = ?`,
-        [id],
+      await connection.query(
+        `
+      INSERT INTO trip_participants (trip_id, user_id, role)
+      VALUES (?, ?, 'passenger')
+      ON DUPLICATE KEY UPDATE role = VALUES(role)
+      `,
+        [req.trip_id, req.requester_id],
       );
 
-      if (req.requester_id !== ownerId) {
-        await this.notificationsService.create({
-          receiverId: req.requester_id,
-          senderId: ownerId,
-          tripId: req.trip_id,
-          type: 'interest_accepted',
-          message: 'Accepted your request!',
-          interestRequestId: id,
-        });
-      }
+      await connection.commit();
 
-      return { status: 'accepted' };
+      acceptedRequest = {
+        requesterId: req.requester_id,
+        tripId: req.trip_id,
+      };
     } catch (error) {
       await connection.rollback();
       throw error;
     } finally {
       connection.release();
     }
+
+    await this.db.query(
+      `DELETE FROM notifications WHERE interest_request_id = ?`,
+      [id],
+    );
+
+    if (acceptedRequest.requesterId !== loggedInUserId) {
+      await this.notificationsService.create({
+        receiverId: acceptedRequest.requesterId,
+        senderId: loggedInUserId,
+        tripId: acceptedRequest.tripId,
+        type: 'interest_accepted',
+        message: 'Accepted your request!',
+        interestRequestId: id,
+      });
+    }
+
+    return { status: 'accepted' };
   }
-  async remove(id: number) {
+
+  async remove(id: number, loggedInUserId: number) {
+    if (!id || isNaN(id)) {
+      throw new BadRequestException('Invalid interest request id');
+    }
+
     const [[req]]: any = await this.db.query(
-      `SELECT requester_id FROM interest_requests WHERE id = ?`,
+      `
+    SELECT
+      ir.requester_id,
+      ir.trip_id,
+      ir.owner_id,
+      ir.status,
+      t.creator_id
+    FROM interest_requests ir
+    JOIN trips t ON t.id = ir.trip_id
+    WHERE ir.id = ?
+    LIMIT 1
+    `,
       [id],
     );
 
     if (!req) return { success: true };
 
+    if (req.owner_id !== loggedInUserId || req.creator_id !== loggedInUserId) {
+      throw new ForbiddenException('You cannot reject this request');
+    }
+
+    if (req.status !== 'pending') {
+      throw new BadRequestException('Request already handled');
+    }
+
     await this.db.query(
-      `UPDATE interest_requests SET status = 'rejected' WHERE id = ?`,
+      `
+    UPDATE interest_requests
+    SET status = 'rejected'
+    WHERE id = ? AND status = 'pending'
+    `,
       [id],
     );
 

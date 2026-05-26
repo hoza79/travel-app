@@ -19,26 +19,29 @@ export class PostService {
   ) {}
 
   async create(createPostDto: CreatePostDto, userId: number) {
-    const { from, to, date, seatsAvailable, description, type } = createPostDto;
+    const {
+      from,
+      to,
+      date,
+      seatsAvailable,
+      description,
+      type,
+      originLat,
+      originLng,
+      destinationLat,
+      destinationLng,
+    } = createPostDto;
 
-    const from_location = await getCoordinates(from);
-    const to_location = await getCoordinates(to);
-
-    if (!from_location) {
+    if (
+      !Number.isFinite(originLat) ||
+      !Number.isFinite(originLng) ||
+      !Number.isFinite(destinationLat) ||
+      !Number.isFinite(destinationLng)
+    ) {
       throw new BadRequestException(
-        `Could not find coordinates for: "${from}". Please check the spelling.`,
+        'Valid origin and destination coordinates are required',
       );
     }
-    if (!to_location) {
-      throw new BadRequestException(
-        `Could not find coordinates for: "${to}". Please check the spelling.`,
-      );
-    }
-
-    const from_lat = from_location.lat;
-    const from_lng = from_location.lng;
-    const to_lat = to_location.lat;
-    const to_lng = to_location.lng;
 
     try {
       const [rows]: any = await this.db.query(
@@ -56,7 +59,7 @@ export class PostService {
         );
       }
 
-      await this.db.query(
+      const [result]: any = await this.db.query(
         `INSERT INTO trips (
           creator_id, origin, destination, trip_date,
           available_seats, description, type,
@@ -70,16 +73,17 @@ export class PostService {
           seatsAvailable,
           description,
           type,
-          from_lat,
-          from_lng,
-          to_lat,
-          to_lng,
+          originLat,
+          originLng,
+          destinationLat,
+          destinationLng,
         ],
       );
 
+      this.notificationsGateway.sendTripCreated(result.insertId);
+
       return { message: 'Trip registered successfully' };
     } catch (error) {
-      console.error('❌ Database Error (create):', error);
       throw error;
     }
   }
@@ -94,7 +98,6 @@ export class PostService {
       );
       return rows;
     } catch (error) {
-      console.error('❌ Database Error (findAll):', error);
       throw error;
     }
   }
@@ -136,7 +139,6 @@ export class PostService {
       const [rows] = await this.db.query(sql, params);
       return rows;
     } catch (error) {
-      console.error('❌ Database Error (findNearby):', error);
       throw error;
     }
   }
@@ -153,7 +155,6 @@ export class PostService {
       );
       return rows;
     } catch (error) {
-      console.error('❌ Database Error (findByUser):', error);
       throw error;
     }
   }
@@ -170,7 +171,6 @@ export class PostService {
       );
       return rows;
     } catch (error) {
-      console.error('❌ Database Error (findMyTrips):', error);
       throw error;
     }
   }
@@ -209,7 +209,6 @@ export class PostService {
         distance: null,
       };
     } catch (error) {
-      console.error('❌ Database Error (findOne):', error);
       throw error;
     }
   }
@@ -242,7 +241,6 @@ export class PostService {
 
       return { message: 'Trip deleted successfully' };
     } catch (error) {
-      console.error('❌ Database Error (delete):', error);
       throw error;
     }
   }
@@ -270,7 +268,6 @@ export class PostService {
 
       return { message: 'Photo post created successfully' };
     } catch (error) {
-      console.error('❌ Database Error (createPhoto):', error);
       throw error;
     }
   }
@@ -331,7 +328,6 @@ export class PostService {
 
       return rows;
     } catch (error) {
-      console.error('❌ Database Error (getAllPhotos):', error);
       throw error;
     }
   }
@@ -353,7 +349,6 @@ export class PostService {
       );
       return data;
     } catch (error) {
-      console.error('❌ Database Error (getPhotosByUser):', error);
       throw error;
     }
   }
@@ -379,7 +374,6 @@ export class PostService {
 
       return { message: 'Photo deleted successfully' };
     } catch (error) {
-      console.error('❌ Database Error (deletePhoto):', error);
       throw error;
     }
   }

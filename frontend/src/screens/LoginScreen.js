@@ -14,6 +14,7 @@ import styles from "../styles/LoginScreen_styles";
 import Title from "../common/Title";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
+import { reconnectSocketAfterAuth } from "../socket";
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -40,6 +41,7 @@ const LoginScreen = ({ navigation }) => {
         if (data.user?.id) {
           await AsyncStorage.setItem("userId", data.user.id.toString());
         }
+        await reconnectSocketAfterAuth();
 
         navigation.reset({
           index: 0,

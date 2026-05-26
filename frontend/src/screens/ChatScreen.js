@@ -113,7 +113,6 @@ const ChatScreen = ({ route, navigation }) => {
       const socket = getSocket();
       socket.emit("sendMessage", {
         conversationId,
-        sender_id: currentUserId,
         receiver_id: receiverId,
         message_text: text.trim(),
       });

@@ -7,7 +7,6 @@ import {
   Param,
   Delete,
   Req,
-  BadRequestException,
 } from '@nestjs/common';
 import { InterestRequestsService } from './interest_requests.service';
 import { CreateInterestRequestDto } from './dto/create-interest_request.dto';
@@ -25,12 +24,6 @@ export class InterestRequestsController {
     @Body() createInterestRequestDto: CreateInterestRequestDto,
   ) {
     const userId = verifyToken(req);
-
-    if (userId === createInterestRequestDto.ownerId) {
-      throw new BadRequestException(
-        'You cannot request interest on your own trip',
-      );
-    }
 
     return this.interestRequestsService.create(
       createInterestRequestDto,
@@ -51,8 +44,9 @@ export class InterestRequestsController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.interestRequestsService.remove(+id);
+  remove(@Param('id') id: string, @Req() req) {
+    const userId = verifyToken(req);
+    return this.interestRequestsService.remove(+id, userId);
   }
 
   @Get('accepted_count/:tripId')

@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
 import styles from "../styles/MessagesScreen_styles";
 import Chat from "../common/Chat";
-import { getSocket, onSocketReady } from "../socket";
+import { getSocket, onSocketConnected, onSocketReady } from "../socket";
 import { useIsFocused } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -28,7 +28,6 @@ const MessagesScreen = () => {
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
 
-      // ✅ filter + deduplicate
       const clean = list
         .filter((c) => c.conversationId && c.lastMessageTime)
         .reduce((acc, curr) => {
@@ -66,30 +65,42 @@ const MessagesScreen = () => {
   }, []);
 
   useEffect(() => {
-    let socket;
+    let socketRef = null;
 
-    onSocketReady(() => {
-      socket = getSocket();
+    const handleConversationUpdate = (preview) => {
+      if (!preview?.conversationId) return;
+
+      setConversations((prev) => {
+        const filtered = prev.filter(
+          (c) => c.conversationId !== preview.conversationId,
+        );
+
+        return [preview, ...filtered];
+      });
+    };
+
+    const attachListeners = () => {
+      const socket = getSocket();
       if (!socket) return;
 
-      const handleConversationUpdate = (preview) => {
-        if (!preview?.conversationId) return;
+      if (socketRef && socketRef !== socket) {
+        socketRef.off("conversationUpdate", handleConversationUpdate);
+      }
 
-        setConversations((prev) => {
-          const filtered = prev.filter(
-            (c) => c.conversationId !== preview.conversationId,
-          );
-
-          return [preview, ...filtered];
-        });
-      };
-
+      socketRef = socket;
+      socket.off("conversationUpdate", handleConversationUpdate);
       socket.on("conversationUpdate", handleConversationUpdate);
-    });
+    };
+
+    const unsubscribeReady = onSocketReady(attachListeners);
+    const unsubscribeConnect = onSocketConnected(attachListeners);
 
     return () => {
-      if (socket) {
-        socket.off("conversationUpdate");
+      unsubscribeReady();
+      unsubscribeConnect();
+
+      if (socketRef) {
+        socketRef.off("conversationUpdate", handleConversationUpdate);
       }
     };
   }, []);
@@ -121,7 +132,7 @@ const MessagesScreen = () => {
       <ScrollView style={styles.scrollView}>
         {filtered.map((c) => (
           <Chat
-            key={c.conversationId} // ✅ FIXED KEY
+            key={c.conversationId}
             conversation={c}
             onDelete={deleteConversation}
           />

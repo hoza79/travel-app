@@ -1,6 +1,6 @@
 import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSocket, onSocketReady } from "../socket";
+import { getSocket, onSocketConnected, onSocketReady } from "../socket";
 import BASE_URL from "../config/api";
 
 export const MessageContext = createContext({
@@ -55,26 +55,44 @@ export const MessageProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    onSocketReady(() => {
+    let socketRef = null;
+
+    const handleConversationUpdate = () => {
+      recalcUnread();
+    };
+
+    const handleNewMessage = () => {
+      recalcUnread();
+    };
+
+    const attachListeners = () => {
       const socket = getSocket();
       if (!socket) return;
 
-      const handleConversationUpdate = () => {
-        recalcUnread();
-      };
+      if (socketRef && socketRef !== socket) {
+        socketRef.off("conversationUpdate", handleConversationUpdate);
+        socketRef.off("newMessage", handleNewMessage);
+      }
 
-      const handleNewMessage = () => {
-        recalcUnread();
-      };
-
+      socketRef = socket;
+      socket.off("conversationUpdate", handleConversationUpdate);
+      socket.off("newMessage", handleNewMessage);
       socket.on("conversationUpdate", handleConversationUpdate);
       socket.on("newMessage", handleNewMessage);
+    };
 
-      return () => {
-        socket.off("conversationUpdate", handleConversationUpdate);
-        socket.off("newMessage", handleNewMessage);
-      };
-    });
+    const unsubscribeReady = onSocketReady(attachListeners);
+    const unsubscribeConnect = onSocketConnected(attachListeners);
+
+    return () => {
+      unsubscribeReady();
+      unsubscribeConnect();
+
+      if (socketRef) {
+        socketRef.off("conversationUpdate", handleConversationUpdate);
+        socketRef.off("newMessage", handleNewMessage);
+      }
+    };
   }, []);
 
   return (

@@ -66,7 +66,6 @@ const ProfilePassengerView = () => {
       const photosRes = await fetch(`${BASE_URL}/post/photos/${passedUserId}`);
       setPhotos(await photosRes.json());
     } catch (err) {
-      console.log("❌ Profile load error:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -76,7 +75,7 @@ const ProfilePassengerView = () => {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [passedUserId])
+    }, [passedUserId]),
   );
 
   const onRefresh = () => {

@@ -12,7 +12,8 @@ import PhotoCard from "../common/PhotoCard";
 import styles from "../styles/HomeScreen_styles";
 import * as Location from "expo-location";
 import BASE_URL from "../config/api";
-import { getSocket, onSocketReady } from "../socket";
+import { getSocket, onSocketConnected, onSocketReady } from "../socket";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const HomeScreen = () => {
@@ -24,7 +25,7 @@ const HomeScreen = () => {
   const [userLng, setUserLng] = useState(null);
 
   const [offset, setOffset] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false); // ✅ FIX
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const LIMIT = 50;
 
@@ -97,33 +98,68 @@ const HomeScreen = () => {
   }, []);
 
   useEffect(() => {
-    onSocketReady(() => {
+    let socketRef = null;
+
+    const handleNewNotification = () => {
+      if (userLat && userLng) {
+        setOffset(0);
+        fetchAll(userLat, userLng, search, 0);
+      }
+    };
+
+    const handleTripCreatedEvent = () => {
+      if (userLat && userLng) {
+        setOffset(0);
+        fetchAll(userLat, userLng, search, 0);
+      }
+    };
+
+    const handleTripDeletedEvent = ({ tripId }) => {
+      handleTripDeleted(tripId);
+    };
+
+    const handlePhotoDeletedEvent = ({ photoId }) => {
+      handlePhotoDeleted(photoId);
+    };
+
+    const attachListeners = () => {
       const socket = getSocket();
       if (!socket) return;
 
-      socket.on("new_notification", () => {
-        if (userLat && userLng) {
-          setOffset(0);
-          fetchAll(userLat, userLng, search, 0);
-        }
-      });
+      if (socketRef && socketRef !== socket) {
+        socketRef.off("new_notification", handleNewNotification);
+        socketRef.off("trip_created", handleTripCreatedEvent);
+        socketRef.off("trip_deleted", handleTripDeletedEvent);
+        socketRef.off("photo_deleted", handlePhotoDeletedEvent);
+      }
 
-      socket.on("trip_deleted", ({ tripId }) => {
-        handleTripDeleted(tripId);
-      });
+      socketRef = socket;
+      socket.off("new_notification", handleNewNotification);
+      socket.off("trip_created", handleTripCreatedEvent);
+      socket.off("trip_deleted", handleTripDeletedEvent);
+      socket.off("photo_deleted", handlePhotoDeletedEvent);
 
-      socket.on("photo_deleted", ({ photoId }) => {
-        handlePhotoDeleted(photoId);
-      });
+      socket.on("new_notification", handleNewNotification);
+      socket.on("trip_created", handleTripCreatedEvent);
+      socket.on("trip_deleted", handleTripDeletedEvent);
+      socket.on("photo_deleted", handlePhotoDeletedEvent);
+    };
 
-      return () => {
-        socket.off("new_notification");
-        socket.off("trip_deleted");
-        socket.off("photo_deleted");
-      };
-    });
+    const unsubscribeReady = onSocketReady(attachListeners);
+    const unsubscribeConnect = onSocketConnected(attachListeners);
+
+    return () => {
+      unsubscribeReady();
+      unsubscribeConnect();
+
+      if (socketRef) {
+        socketRef.off("new_notification", handleNewNotification);
+        socketRef.off("trip_created", handleTripCreatedEvent);
+        socketRef.off("trip_deleted", handleTripDeletedEvent);
+        socketRef.off("photo_deleted", handlePhotoDeletedEvent);
+      }
+    };
   }, [userLat, userLng, search]);
-
   useEffect(() => {
     const delay = setTimeout(() => {
       if (userLat && userLng) {

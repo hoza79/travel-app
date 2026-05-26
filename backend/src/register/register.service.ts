@@ -42,7 +42,6 @@ export class RegisterService {
         throw new ConflictException('User already exists');
       }
 
-      console.error('❌ Database Error:', error);
       throw error;
     }
   }

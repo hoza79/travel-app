@@ -5,7 +5,7 @@ import { Image, View, Text } from "react-native";
 import HomeScreen from "../screens/HomeScreen";
 import MessagesScreen from "../screens/MessagesScreen";
 import PostScreen from "../screens/PostScreen";
-import ProfileSelfScreen from "../screens/ProfileSelfScreen"; // ⭐ CHANGED
+import ProfileSelfScreen from "../screens/ProfileSelfScreen";
 import NotificationsScreen from "../screens/NotificationScreen";
 
 import { NotificationContext } from "../context/NotificationContext";

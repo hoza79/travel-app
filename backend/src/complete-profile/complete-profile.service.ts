@@ -19,7 +19,6 @@ export class CompleteProfileService {
 
       return { message: 'Profile completed successfully.' };
     } catch (error) {
-      console.error('❌ Database Error (completeProfile):', error);
       throw error;
     }
   }

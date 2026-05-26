@@ -13,7 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
-import { getSocket, onSocketReady } from "../socket";
+import { getSocket, onSocketConnected, onSocketReady } from "../socket";
+
 import BASE_URL from "../config/api";
 import { NotificationContext } from "../context/NotificationContext";
 import TravelCard from "../common/TravelCard";
@@ -67,9 +68,7 @@ export default function NotificationsScreen() {
         senderLast,
         senderPhoto,
       });
-    } catch (err) {
-      console.log("Popup load error:", err);
-    }
+    } catch (err) {}
 
     setPopupLoading(false);
   };
@@ -79,18 +78,43 @@ export default function NotificationsScreen() {
   }, []);
 
   useEffect(() => {
-    onSocketReady(() => {
+    let socketRef = null;
+
+    const handleNewNotification = () => {
+      load();
+    };
+
+    const handleNotificationDeleted = () => {
+      load();
+    };
+
+    const attachListeners = () => {
       const socket = getSocket();
       if (!socket) return;
 
-      socket.on("new_notification", () => load());
-      socket.on("notification_deleted", () => load());
-    });
+      if (socketRef && socketRef !== socket) {
+        socketRef.off("new_notification", handleNewNotification);
+        socketRef.off("notification_deleted", handleNotificationDeleted);
+      }
+
+      socketRef = socket;
+      socket.off("new_notification", handleNewNotification);
+      socket.off("notification_deleted", handleNotificationDeleted);
+      socket.on("new_notification", handleNewNotification);
+      socket.on("notification_deleted", handleNotificationDeleted);
+    };
+
+    const unsubscribeReady = onSocketReady(attachListeners);
+    const unsubscribeConnect = onSocketConnected(attachListeners);
 
     return () => {
-      const socket = getSocket();
-      socket?.off("new_notification");
-      socket?.off("notification_deleted");
+      unsubscribeReady();
+      unsubscribeConnect();
+
+      if (socketRef) {
+        socketRef.off("new_notification", handleNewNotification);
+        socketRef.off("notification_deleted", handleNotificationDeleted);
+      }
     };
   }, []);
 

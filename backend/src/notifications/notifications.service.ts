@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
 import { NotificationsGateway } from './notifications.gateway';
 
@@ -13,8 +13,6 @@ interface CreateNotificationParams {
 
 @Injectable()
 export class NotificationsService {
-  private readonly logger = new Logger(NotificationsService.name);
-
   constructor(
     @Inject('DATABASE_CONNECTION') private readonly db: Pool,
     private readonly gateway: NotificationsGateway,
@@ -24,10 +22,6 @@ export class NotificationsService {
     const { receiverId, senderId, tripId, type, message, interestRequestId } =
       params;
 
-    console.log(
-      `[DEBUG] Attempting to create notification for receiver: ${receiverId}`,
-    );
-
     const [res]: any = await this.db.query(
       `INSERT INTO notifications (receiver_id, sender_id, trip_id, type, message, interest_request_id, is_read)
      VALUES (?, ?, ?, ?, ?, ?, 0)`,
@@ -35,7 +29,6 @@ export class NotificationsService {
     );
 
     const insertedId = res.insertId;
-    console.log(`[DEBUG] Notification inserted with ID: ${insertedId}`);
 
     const [[notif]]: any = await this.db.query(
       `SELECT notifications.*, users.first_name AS sender_first_name, users.last_name AS sender_last_name, users.profile_photo AS sender_photo
@@ -45,15 +38,9 @@ export class NotificationsService {
     );
 
     if (notif) {
-      console.log(`[DEBUG] Notification found in DB, sending to gateway...`);
       try {
         this.gateway.sendNotification(receiverId, notif);
-        console.log(`[DEBUG] Gateway sendNotification called successfully`);
-      } catch (e) {
-        console.error('[DEBUG] Gateway call failed:', e);
-      }
-    } else {
-      console.log(`[DEBUG] Failed to fetch notification after insert!`);
+      } catch (e) {}
     }
 
     return notif;

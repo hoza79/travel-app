@@ -103,7 +103,6 @@ const CompleteProfileScreen = ({ navigation }) => {
         routes: [{ name: "BottomNavigator" }],
       });
     } catch (err) {
-      console.error("❌ Profile setup error:", err);
       setMessage("Something went wrong");
       setShowModal(true);
     }

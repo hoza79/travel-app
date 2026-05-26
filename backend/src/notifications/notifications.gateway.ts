@@ -3,28 +3,20 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
-  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { verifySocketToken } from 'src/utils/jwt.utils';
-import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({
   cors: { origin: '*' },
 })
 export class NotificationsGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayConnection, OnGatewayDisconnect
 {
-  private readonly logger = new Logger(NotificationsGateway.name);
-
   @WebSocketServer()
   server: Server;
 
   private clients = new Map<number, Set<string>>();
-
-  afterInit() {
-    this.logger.log('NotificationsGateway initialized');
-  }
 
   async handleConnection(client: Socket) {
     try {
@@ -35,19 +27,20 @@ export class NotificationsGateway
         tokenUserId = null;
       }
 
-      this.logger.log(
-        `Client connected: ${client.id} (handshakeUid=${tokenUserId})`,
-      );
-
       if (tokenUserId) {
         this.addClientMapping(tokenUserId, client.id);
         await client.join(`user_${tokenUserId}`);
-        this.logger.log(`User ${tokenUserId} joined room: user_${tokenUserId}`);
       }
 
-      client.on('identify', async (data) => {
-        const uid = Number(data?.userId);
-        if (!Number.isNaN(uid) && uid > 0) {
+      client.on('identify', async () => {
+        let uid: number | null = null;
+        try {
+          uid = verifySocketToken(client);
+        } catch {
+          uid = null;
+        }
+
+        if (uid && uid > 0) {
           this.addClientMapping(uid, client.id);
           await client.join(`user_${uid}`);
           client.emit('identify_ack', { success: true, userId: uid });
@@ -87,7 +80,6 @@ export class NotificationsGateway
   }
 
   sendNotification(userId: number, payload: any) {
-    this.logger.log(`Sending notification to user_${userId} via Redis/Rooms`);
     this.server.to(`user_${userId}`).emit('new_notification', payload);
   }
 
@@ -99,6 +91,10 @@ export class NotificationsGateway
 
   sendTripDeleted(tripId: number) {
     this.server.emit('trip_deleted', { tripId });
+  }
+
+  sendTripCreated(tripId: number) {
+    this.server.emit('trip_created', { tripId });
   }
 
   sendPhotoDeleted(photoId: number) {

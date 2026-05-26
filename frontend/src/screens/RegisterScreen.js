@@ -14,6 +14,7 @@ import styles from "../styles/RegisterScreen_styles";
 import Title from "../common/Title";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BASE_URL from "../config/api";
+import { reconnectSocketAfterAuth } from "../socket";
 
 const RegisterScreen = ({ navigation }) => {
   const [first_name, setFirstName] = useState("");
@@ -59,6 +60,7 @@ const RegisterScreen = ({ navigation }) => {
         if (data.user?.id) {
           await AsyncStorage.setItem("userId", data.user.id.toString());
         }
+        await reconnectSocketAfterAuth();
 
         setHasRegisteredThisSession(true);
 
@@ -76,7 +78,6 @@ const RegisterScreen = ({ navigation }) => {
         setShowModal(true);
       }
     } catch (error) {
-      console.error("❌ Registration error:", error);
       setMessage("Something went wrong");
       setIsSuccess(false);
       setShowModal(true);

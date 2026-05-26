@@ -1,6 +1,11 @@
 import React, { createContext, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSocket, onSocketReady } from "../socket";
+import {
+  getSocket,
+  onNotify,
+  onSocketConnected,
+  onSocketReady,
+} from "../socket";
 import BASE_URL from "../config/api";
 import { AppState } from "react-native";
 
@@ -33,54 +38,29 @@ export const NotificationProvider = ({ children }) => {
       if (mountedRef.current) {
         setUnreadCount(count);
       }
-    } catch (e) {
-      console.log("❌ refetchUnread error:", e);
-    }
+    } catch (e) {}
   };
 
   useEffect(() => {
-    onSocketReady(() => {
-      const socket = getSocket();
-      if (!socket) return;
-
-      const handleNewNotification = () => {
-        console.log("🔥 NEW NOTIFICATION EVENT");
-        refetchUnread();
-      };
-
-      const handleDeletion = () => {
-        console.log("🗑 NOTIFICATION DELETED EVENT");
-        refetchUnread();
-      };
-
-      const handleReconnect = async () => {
-        console.log("🔁 SOCKET RECONNECTED");
-
-        const userId = await AsyncStorage.getItem("userId");
-        if (userId) {
-          socket.emit("identify", { userId });
-          console.log("👤 RE-IDENTIFIED:", userId);
-        }
-
-        refetchUnread();
-      };
-
-      socket.off("new_notification");
-      socket.off("notification_deleted");
-      socket.off("connect");
-
-      socket.on("new_notification", handleNewNotification);
-      socket.on("notification_deleted", handleDeletion);
-      socket.on("connect", handleReconnect);
-
+    const unsubscribeNotify = onNotify(() => {
       refetchUnread();
-
-      return () => {
-        socket.off("new_notification", handleNewNotification);
-        socket.off("notification_deleted", handleDeletion);
-        socket.off("connect", handleReconnect);
-      };
     });
+
+    const unsubscribeConnect = onSocketConnected(() => {
+      refetchUnread();
+    });
+
+    const unsubscribeReady = onSocketReady(() => {
+      refetchUnread();
+    });
+
+    refetchUnread();
+
+    return () => {
+      unsubscribeNotify();
+      unsubscribeConnect();
+      unsubscribeReady();
+    };
   }, []);
 
   useEffect(() => {

@@ -8,7 +8,8 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { verifySocketToken } from 'src/utils/jwt.utils';
 import type { Pool } from 'mysql2/promise';
 
 @WebSocketGateway({
@@ -22,30 +23,48 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(@Inject('DATABASE_CONNECTION') private readonly db: Pool) {}
 
   handleConnection(client: Socket) {
-    console.log('Chat client connected:', client.id);
+    client.on('chat_identify', async () => {
+      const userId = verifySocketToken(client);
 
-    // 🔥 IMPORTANT – join room
-    client.on('chat_identify', async (data) => {
-      const userId = Number(data?.userId);
-      if (!userId) return;
+      if (!userId) {
+        client.emit('chat_identify_ack', { success: false });
+        return;
+      }
 
       await client.join(`user_${userId}`);
-      console.log(`User ${userId} joined room user_${userId}`);
+      client.emit('chat_identify_ack', { success: true, userId });
     });
   }
 
-  handleDisconnect(client: Socket) {
-    console.log('Chat client disconnected:', client.id);
-  }
+  handleDisconnect(client: Socket) {}
 
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() message: any,
   ) {
-    const { conversationId, sender_id, receiver_id, message_text } = message;
+    const sender_id = verifySocketToken(client);
 
-    // 💾 SAVE MESSAGE
+    if (!sender_id) {
+      throw new UnauthorizedException('Invalid or missing socket token');
+    }
+
+    const { conversationId, receiver_id, message_text } = message;
+    const [participants]: any = await this.db.query(
+      `
+  SELECT user_id
+  FROM conversation_participants
+  WHERE conversation_id = ?
+  AND user_id IN (?, ?)
+  `,
+      [conversationId, sender_id, receiver_id],
+    );
+
+    if (!Array.isArray(participants) || participants.length !== 2) {
+      throw new UnauthorizedException(
+        'You are not allowed to send messages in this conversation',
+      );
+    }
     await this.db.query(
       `
       INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, sent_at, is_read)
