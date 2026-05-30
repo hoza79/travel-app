@@ -143,32 +143,119 @@ export class PostService {
     }
   }
 
-  async findByUser(userId: number) {
+  async findRouteMatches(
+    desiredOriginLat: number,
+    desiredOriginLng: number,
+    desiredDestinationLat: number,
+    desiredDestinationLng: number,
+    pickupRadiusKm: number,
+    destinationRadiusKm: number,
+    offset: number = 0,
+    limit: number = 50,
+  ) {
     try {
       const [rows] = await this.db.query(
-        `SELECT trips.*, users.first_name, users.profile_photo
-         FROM trips
-         JOIN users ON trips.creator_id = users.id
-         WHERE creator_id = ?
-         ORDER BY trip_date DESC`,
-        [userId],
+        `
+        SELECT matching_trips.*
+        FROM (
+          SELECT
+            trips.*,
+            users.first_name,
+            users.profile_photo,
+            (
+              6371 * ACOS(
+                LEAST(
+                  1,
+                  GREATEST(
+                    -1,
+                    COS(RADIANS(?)) *
+                    COS(RADIANS(trips.origin_lat)) *
+                    COS(RADIANS(trips.origin_lng) - RADIANS(?)) +
+                    SIN(RADIANS(?)) *
+                    SIN(RADIANS(trips.origin_lat))
+                  )
+                )
+              )
+            ) AS pickup_distance,
+            (
+              6371 * ACOS(
+                LEAST(
+                  1,
+                  GREATEST(
+                    -1,
+                    COS(RADIANS(?)) *
+                    COS(RADIANS(trips.destination_lat)) *
+                    COS(RADIANS(trips.destination_lng) - RADIANS(?)) +
+                    SIN(RADIANS(?)) *
+                    SIN(RADIANS(trips.destination_lat))
+                  )
+                )
+              )
+            ) AS destination_distance
+          FROM trips
+          JOIN users ON trips.creator_id = users.id
+          WHERE trips.origin_lat IS NOT NULL
+            AND trips.origin_lng IS NOT NULL
+            AND trips.destination_lat IS NOT NULL
+            AND trips.destination_lng IS NOT NULL
+        ) AS matching_trips
+        WHERE matching_trips.pickup_distance <= ?
+          AND matching_trips.destination_distance <= ?
+        ORDER BY
+          (matching_trips.pickup_distance + matching_trips.destination_distance) ASC,
+          matching_trips.id ASC
+        LIMIT ? OFFSET ?
+        `,
+        [
+          desiredOriginLat,
+          desiredOriginLng,
+          desiredOriginLat,
+          desiredDestinationLat,
+          desiredDestinationLng,
+          desiredDestinationLat,
+          pickupRadiusKm,
+          destinationRadiusKm,
+          limit,
+          offset,
+        ],
       );
+
       return rows;
     } catch (error) {
       throw error;
     }
   }
 
-  async findMyTrips(userId: number) {
+  async findByUser(userId: number, offset: number = 0, limit: number = 50) {
     try {
       const [rows] = await this.db.query(
         `SELECT trips.*, users.first_name, users.profile_photo
          FROM trips
          JOIN users ON trips.creator_id = users.id
-         WHERE creator_id = ?
-         ORDER BY trip_date DESC`,
-        [userId],
+         WHERE trips.creator_id = ?
+         ORDER BY trips.trip_date DESC
+         LIMIT ? OFFSET ?`,
+        [userId, limit, offset],
       );
+
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findMyTrips(userId: number, offset: number = 0, limit: number = 50) {
+    try {
+      const [rows] = await this.db.query(
+        `SELECT trips.*, users.first_name, users.profile_photo
+         FROM trips
+         JOIN users ON trips.creator_id = users.id
+         WHERE trips.creator_id = ?
+         ORDER BY trips.trip_date DESC
+         LIMIT ? OFFSET ?`,
+        [userId, limit, offset],
+      );
+
       return rows;
     } catch (error) {
       throw error;

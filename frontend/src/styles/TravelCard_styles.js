@@ -78,7 +78,19 @@ export default StyleSheet.create({
     opacity: 0.8,
   },
 
+  routeDistanceContainer: {
+    alignItems: "flex-end",
+    marginTop: -10,
+    marginRight: 8,
+  },
+
   distanceText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 13,
+    textAlign: "right",
+  },
+
+  singleDistanceText: {
     color: "rgba(255,255,255,0.8)",
     fontSize: 13,
     textAlign: "right",

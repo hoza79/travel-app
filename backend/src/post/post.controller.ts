@@ -60,14 +60,143 @@ export class PostController {
     );
   }
 
+  @Get('route-search')
+  findRouteMatches(
+    @Query('originLat') originLat?: string,
+    @Query('originLng') originLng?: string,
+    @Query('destinationLat') destinationLat?: string,
+    @Query('destinationLng') destinationLng?: string,
+    @Query('pickupRadiusKm') pickupRadiusKm?: string,
+    @Query('destinationRadiusKm') destinationRadiusKm?: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const requiredValues = [
+      originLat,
+      originLng,
+      destinationLat,
+      destinationLng,
+      pickupRadiusKm,
+      destinationRadiusKm,
+    ];
+
+    if (
+      requiredValues.some((value) => value == null || value.trim().length === 0)
+    ) {
+      throw new BadRequestException(
+        'Route coordinates and distance limits are required',
+      );
+    }
+
+    const parsedOriginLat = Number(originLat);
+    const parsedOriginLng = Number(originLng);
+    const parsedDestinationLat = Number(destinationLat);
+    const parsedDestinationLng = Number(destinationLng);
+    const parsedPickupRadiusKm = Number(pickupRadiusKm);
+    const parsedDestinationRadiusKm = Number(destinationRadiusKm);
+    const parsedOffset = offset == null ? 0 : Number(offset);
+    const parsedLimit = limit == null ? 50 : Number(limit);
+
+    if (
+      !Number.isFinite(parsedOriginLat) ||
+      !Number.isFinite(parsedOriginLng) ||
+      !Number.isFinite(parsedDestinationLat) ||
+      !Number.isFinite(parsedDestinationLng)
+    ) {
+      throw new BadRequestException('Coordinates must be valid numbers');
+    }
+
+    if (
+      parsedOriginLat < -90 ||
+      parsedOriginLat > 90 ||
+      parsedDestinationLat < -90 ||
+      parsedDestinationLat > 90 ||
+      parsedOriginLng < -180 ||
+      parsedOriginLng > 180 ||
+      parsedDestinationLng < -180 ||
+      parsedDestinationLng > 180
+    ) {
+      throw new BadRequestException('Coordinates are outside valid ranges');
+    }
+
+    if (
+      !Number.isFinite(parsedPickupRadiusKm) ||
+      !Number.isFinite(parsedDestinationRadiusKm) ||
+      parsedPickupRadiusKm < 0 ||
+      parsedDestinationRadiusKm < 0
+    ) {
+      throw new BadRequestException(
+        'Distance limits must be valid non-negative values',
+      );
+    }
+
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+      throw new BadRequestException('Offset must be a valid positive integer');
+    }
+
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new BadRequestException('Limit must be a valid positive integer');
+    }
+
+    return this.postService.findRouteMatches(
+      parsedOriginLat,
+      parsedOriginLng,
+      parsedDestinationLat,
+      parsedDestinationLng,
+      parsedPickupRadiusKm,
+      parsedDestinationRadiusKm,
+      parsedOffset,
+      Math.min(parsedLimit, 100),
+    );
+  }
+
   @Get('user/:id')
-  findByUser(@Param('id') id: string) {
-    return this.postService.findByUser(Number(id));
+  findByUser(
+    @Param('id') id: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedId = Number(id);
+    const parsedOffset = offset == null ? 0 : Number(offset);
+    const parsedLimit = limit == null ? 50 : Math.min(Number(limit), 100);
+
+    if (!Number.isInteger(parsedId) || parsedId < 1) {
+      throw new BadRequestException('Invalid user id');
+    }
+
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+      throw new BadRequestException('Offset must be a non-negative integer');
+    }
+
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new BadRequestException('Limit must be a positive integer');
+    }
+
+    return this.postService.findByUser(parsedId, parsedOffset, parsedLimit);
   }
 
   @Get('my-trips')
-  findMyTrips(@Req() req) {
-    return this.postService.findMyTrips(verifyToken(req));
+  findMyTrips(
+    @Req() req,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedOffset = offset == null ? 0 : Number(offset);
+    const parsedLimit = limit == null ? 50 : Math.min(Number(limit), 100);
+
+    if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+      throw new BadRequestException('Offset must be a non-negative integer');
+    }
+
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new BadRequestException('Limit must be a positive integer');
+    }
+
+    return this.postService.findMyTrips(
+      verifyToken(req),
+      parsedOffset,
+      parsedLimit,
+    );
   }
 
   @Post('photo')

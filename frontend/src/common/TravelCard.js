@@ -32,8 +32,10 @@ const TravelCard = ({
   description,
   tripType,
   distance,
-  creatorId,
   tripId,
+  pickupDistance,
+  destinationDistance,
+  creatorId,
   profilePhoto,
   initialStatus,
   embeddedMode,
@@ -328,10 +330,21 @@ const TravelCard = ({
               resizeMode="contain"
               style={styles.logo}
             />
-            {distance != null && (
-              <Text style={styles.distanceText}>
-                {distance < 1 ? "Nearby" : `${distance.toFixed(0)} km away`}
-              </Text>
+            {pickupDistance != null && destinationDistance != null ? (
+              <View style={styles.routeDistanceContainer}>
+                <Text style={styles.distanceText}>
+                  Pickup: {pickupDistance.toFixed(2)} km
+                </Text>
+                <Text style={styles.distanceText}>
+                  Drop-off: {destinationDistance.toFixed(2)} km
+                </Text>
+              </View>
+            ) : (
+              distance != null && (
+                <Text style={styles.singleDistanceText}>
+                  {distance < 1 ? "Nearby" : `${distance.toFixed(0)} km away`}
+                </Text>
+              )
             )}
           </View>
 
