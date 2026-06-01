@@ -270,7 +270,21 @@ const TravelCard = ({
   }, [profilePhoto]);
 
   const isRejected = status === "rejected";
+  const isSearchingTrip = tripType === "Searching";
+  const seatCount = Number(seatsAvailable);
+  const seatWord = seatCount === 1 ? "Seat" : "Seats";
 
+  const seatsLabel = `${seatsAvailable} ${seatWord} ${
+    isSearchingTrip ? "needed" : "available"
+  }`;
+
+  const unavailableLabel = isRejected
+    ? "Unavailable"
+    : isSearchingTrip
+      ? "Matched"
+      : "Full";
+
+  const initialButtonLabel = isSearchingTrip ? "Offer ride" : "Interested";
   const showFull =
     !embeddedMode &&
     !isOwner &&
@@ -279,7 +293,7 @@ const TravelCard = ({
 
   const buttonLabel =
     status === null
-      ? "Interested"
+      ? initialButtonLabel
       : status === "pending"
         ? "Pending"
         : "Send Message";
@@ -373,9 +387,7 @@ const TravelCard = ({
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.seatsAvailable}>
-              {seatsAvailable} Seats available
-            </Text>
+            <Text style={styles.seatsAvailable}>{seatsLabel}</Text>
 
             {isOwner && (
               <TouchableOpacity
@@ -393,7 +405,7 @@ const TravelCard = ({
             {showFull && (
               <View style={styles.fullBadge}>
                 <Text style={styles.fullBadgeIcon}>🔒</Text>
-                <Text style={styles.fullBadgeText}>Full</Text>
+                <Text style={styles.fullBadgeText}>{unavailableLabel}</Text>
               </View>
             )}
 

@@ -35,7 +35,7 @@ export class InterestRequestsService {
 
     const [[trip]]: any = await this.db.query(
       `
-    SELECT creator_id, available_seats
+    SELECT creator_id, available_seats, type
     FROM trips
     WHERE id = ?
     LIMIT 1
@@ -48,7 +48,14 @@ export class InterestRequestsService {
     }
 
     const ownerId = trip.creator_id;
+    const isSearchingTrip = trip.type === 'Searching';
+    const capacityMessage = isSearchingTrip
+      ? 'Request is already matched'
+      : 'Trip is full';
 
+    const interestMessage = isSearchingTrip
+      ? 'Can offer a ride for your request'
+      : 'Wants to join your trip';
     if (ownerId === requesterId) {
       throw new BadRequestException(
         'You cannot request interest on your own trip',
@@ -67,7 +74,7 @@ export class InterestRequestsService {
     const acceptedCount = countRow.accepted ?? 0;
 
     if (acceptedCount >= trip.available_seats) {
-      throw new BadRequestException('Trip is full');
+      throw new BadRequestException(capacityMessage);
     }
 
     try {
@@ -84,7 +91,7 @@ export class InterestRequestsService {
         senderId: requesterId,
         tripId,
         type: 'interest_request',
-        message: 'Wants to join your trip',
+        message: interestMessage,
         interestRequestId,
       });
 
@@ -111,8 +118,11 @@ export class InterestRequestsService {
     }
 
     const connection = await this.db.getConnection();
-    let acceptedRequest: { requesterId: number; tripId: number } | null = null;
-
+    let acceptedRequest: {
+      requesterId: number;
+      tripId: number;
+      tripType: string;
+    } | null = null;
     try {
       await connection.beginTransaction();
 
@@ -136,7 +146,7 @@ export class InterestRequestsService {
 
       const [[trip]]: any = await connection.query(
         `
-      SELECT creator_id, available_seats
+      SELECT creator_id, available_seats, type
       FROM trips
       WHERE id = ?
       FOR UPDATE
@@ -171,7 +181,11 @@ export class InterestRequestsService {
       const acceptedCount = countRow.accepted ?? 0;
 
       if (acceptedCount >= trip.available_seats) {
-        throw new BadRequestException('Trip is full');
+        throw new BadRequestException(
+          trip.type === 'Searching'
+            ? 'Request is already matched'
+            : 'Trip is full',
+        );
       }
 
       await connection.query(
@@ -197,6 +211,7 @@ export class InterestRequestsService {
       acceptedRequest = {
         requesterId: req.requester_id,
         tripId: req.trip_id,
+        tripType: trip.type,
       };
     } catch (error) {
       await connection.rollback();
@@ -216,7 +231,10 @@ export class InterestRequestsService {
         senderId: loggedInUserId,
         tripId: acceptedRequest.tripId,
         type: 'interest_accepted',
-        message: 'Accepted your request!',
+        message:
+          acceptedRequest.tripType === 'Searching'
+            ? 'Accepted your offer!'
+            : 'Accepted your request!',
         interestRequestId: id,
       });
     }
